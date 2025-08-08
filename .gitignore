@@ -1,0 +1,23 @@
+# Unity cache and build files
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Mm]emoryCaptures/
+UserSettings/
+
+# Visual Studio / IDE files
+.vs
+.vsconfig
+*.csproj
+*.user
+*.suo
+*.unityproj
+*.csproj
+*.sln
+
+# OS-specific
+.DS_Store
+Thumbs.db
