@@ -4,72 +4,412 @@ using Unity.Jobs;
 using Unity.Mathematics;
 using System;
 
-/// <summary>
-/// Generates and animates a dynamic water mesh using multiple wave octaves.
-/// Mesh vertices are updated in parallel using a job system, with environmental influences like wind and current.
-/// </summary>
 [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
 public class Waves : MonoBehaviour
 {
-    // --- Environmental Influences ---
-    /// <summary>Direction of wind affecting the waves.</summary>
+    [Header("Environment")]
     public Vector2 windDirection = new Vector2(1, 0);
-    /// <summary>Strength of wind (0 to 1).</summary>
     public float windStrength = 1f;
-    /// <summary>Direction of water current.</summary>
     public Vector2 currentDirection = new Vector2(1, 0);
-    /// <summary>Strength of current (0 to 1).</summary>
     public float currentStrength = 1f;
 
-    // --- Mesh Settings ---
-    /// <summary>Number of grid cells per side (mesh resolution).</summary>
+    [Header("Original Grid Emulation")]
+    [Tooltip("Used only for octave math to emulate the original grid behavior.")]
     public int dimensions = 100;
-    /// <summary>Scale factor for mesh size.</summary>
+
+    [Header("Base Mesh Size (fallback bounds)")]
     public float meshScale = 1f;
 
-    // --- Wave Octaves ---
-    /// <summary>Array of octave settings controlling wave layers.</summary>
+    [Header("Octaves")]
     public Octave[] octaves;
 
-    /// <summary>Mesh representing the water surface.</summary>
+    // ---- Multi-LOD: inner cube + rings ----
+    [Header("Inner High-Res Cube")]
+    public float lodCubeSize = 200f;
+    public int lodHighRes = 100;
+
+    [Header("Multi-LOD Rings (outside the inner cube)")]
+    [SerializeField] private float[] lodRingWidths = new float[] { 40f, 60f, 90f, 140f, 220f }; // outermost is bigger
+    [SerializeField] private int[] lodRingRes = new int[] { 64, 48, 32, 24, 16 }; // decreasing outwards
+    [SerializeField, Range(1, 6)] private int ringThicknessCells = 1;
+    [SerializeField] private float targetCellSize = 8f;
+
+    [Header("Runtime Rebuild")]
+    public bool rebuildAtRuntime = true;
+    public float rebuildDistanceThreshold = 10f;
+    public bool rebuildOnLODParamChange = true;
+
     private Mesh mesh;
-    /// <summary>MeshFilter component reference.</summary>
     private MeshFilter meshFilter;
-    /// <summary>Native array of mesh vertex positions for job processing.</summary>
+
     private NativeArray<float3> vertexData;
-    /// <summary>Native array of octave data for job processing.</summary>
+    private NativeArray<float2> uvData;          // pass UVs to job
     private NativeArray<OctaveData> octaveData;
 
-    /// <summary>
-    /// Initializes the mesh and native arrays, and sets up octave data.
-    /// </summary>
-    private void Start()
+    private Vector3[] vertices;
+    private int[] triangles;
+    private Vector2[] uvs;
+
+    // tracking for runtime rebuilds
+    private Vector3 lastCubeCenter;
+    private int lastHighRes, lastRingWidthHash, lastRingResHash;
+    private float lastCubeSize;
+    private int lastVertexCount = -1;
+    private int lastOctaveCount = -1;
+
+    void Start()
     {
-        mesh = new Mesh
+        meshFilter = GetComponent<MeshFilter>();
+        RegenerateMesh();
+        mesh.MarkDynamic();
+
+        EnsureVertexArray();
+        EnsureUVArray();
+        EnsureOctaveArray();
+
+        CopyMeshVerticesToNative();
+        CopyMeshUVsToNative();
+        CopyOctavesToNative();
+    }
+
+    void OnDisable() => DisposeArrays();
+    void OnDestroy() => DisposeArrays();
+
+    void Update()
+    {
+        // Rebuild mesh if camera moved or LOD params changed
+        if (rebuildAtRuntime && ShouldRebuild())
         {
-            name = gameObject.name + "_Mesh",
-            indexFormat = UnityEngine.Rendering.IndexFormat.UInt32
+            RegenerateMesh();
+            EnsureVertexArray();
+            EnsureUVArray();
+            CopyMeshVerticesToNative();
+            CopyMeshUVsToNative();
+        }
+
+        // Octave size may change live
+        if (octaves.Length != lastOctaveCount)
+            EnsureOctaveArray();
+        CopyOctavesToNative();
+
+        // Normalize safely
+        var windDirNorm = windDirection.sqrMagnitude > 0f ? windDirection.normalized : Vector2.zero;
+        var curDirNorm = currentDirection.sqrMagnitude > 0f ? currentDirection.normalized : Vector2.zero;
+
+        // Schedule job
+        var job = new WavesJob
+        {
+            time = Time.time,
+            vertices = vertexData,
+            uvs = uvData,                                   // pass UVs
+            virtualDimensions = Mathf.Max(1, dimensions),   // emulate original grid
+            windDirection = windDirNorm,
+            windStrength = windStrength,
+            currentDirection = curDirNorm,
+            currentStrength = currentStrength,
+            octaves = octaveData
         };
 
-        mesh.vertices = GenerateVertices();
-        mesh.triangles = GenerateTriangles();
-        mesh.uv = GenerateUVs();
+        var handle = job.Schedule(vertexData.Length, 128);
+        handle.Complete();
+
+        // Apply back to mesh
+        var updated = new Vector3[vertexData.Length];
+        for (int i = 0; i < vertexData.Length; i++) updated[i] = vertexData[i];
+
+        mesh.SetVertices(updated);
+        mesh.RecalculateNormals();
+        // Keep a CPU copy in sync for height sampling
+        vertices = updated;
+        // mesh.RecalculateBounds(); // enable if waves can push verts far horizontally
+    }
+
+    // ---------- Mesh build & LOD ----------
+
+    private bool ShouldRebuild()
+    {
+        Vector3 center = GetCubeCenter();
+        float dist = Vector3.Distance(center, lastCubeCenter);
+        bool movedEnough = dist >= rebuildDistanceThreshold;
+
+        bool lodChanged = rebuildOnLODParamChange &&
+                          (lodHighRes != lastHighRes ||
+                           !Mathf.Approximately(lodCubeSize, lastCubeSize) ||
+                           HashArray(lodRingWidths) != lastRingWidthHash ||
+                           HashArray(lodRingRes) != lastRingResHash);
+
+        return movedEnough || lodChanged;
+    }
+
+    private void RegenerateMesh()
+    {
+        GenerateMultiZoneLODMesh();
+
+        if (mesh == null)
+        {
+            mesh = new Mesh
+            {
+                name = gameObject.name + "_Mesh",
+                indexFormat = UnityEngine.Rendering.IndexFormat.UInt32
+            };
+            meshFilter.mesh = mesh;
+        }
+        else mesh.Clear();
+
+        mesh.SetVertices(vertices);
+        mesh.SetTriangles(triangles, 0);
+        mesh.SetUVs(0, uvs);
         mesh.RecalculateBounds();
         mesh.RecalculateNormals();
 
-        meshFilter = GetComponent<MeshFilter>();
-        meshFilter.mesh = mesh;
+        // record state
+        lastCubeCenter = GetCubeCenter();
+        lastHighRes = lodHighRes;
+        lastCubeSize = lodCubeSize;
+        lastRingWidthHash = HashArray(lodRingWidths);
+        lastRingResHash = HashArray(lodRingRes);
+        lastVertexCount = vertices.Length;
+    }
 
-        // Allocate native vertex array for job usage
-        vertexData = new NativeArray<float3>(mesh.vertices.Length, Allocator.Persistent);
+    private Vector3 GetCubeCenter()
+    {
+        Vector3 camPos = Camera.main != null ? Camera.main.transform.position : Vector3.zero;
+        return new Vector3(camPos.x, transform.position.y, camPos.z);
+    }
 
-        // Copy initial vertex positions
-        var verts = mesh.vertices;
-        for (int i = 0; i < verts.Length; i++)
-            vertexData[i] = verts[i];
+    // High-res inner square + N outer rectangular rings (4 strips each)
+    private void GenerateMultiZoneLODMesh()
+    {
+        Vector3 cubeCenter = GetCubeCenter();
+        float halfCube = Mathf.Max(1f, lodCubeSize * 0.5f);
 
-        // Convert Octave settings to native struct array
+        float minHX = cubeCenter.x - halfCube;
+        float maxHX = cubeCenter.x + halfCube;
+        float minHZ = cubeCenter.z - halfCube;
+        float maxHZ = cubeCenter.z + halfCube;
+
+        // UV area baseline
+        float farExtent = 0f;
+        for (int i = 0; i < lodRingWidths.Length; i++) farExtent += Mathf.Max(0f, lodRingWidths[i]);
+        float areaSize = Mathf.Max(dimensions * meshScale, (halfCube + farExtent) * 2f);
+
+        var verts = new System.Collections.Generic.List<Vector3>();
+        var tris = new System.Collections.Generic.List<int>();
+        var uvsL = new System.Collections.Generic.List<Vector2>();
+
+        // 1) Inner high-res grid
+        int H = Mathf.Max(1, lodHighRes);
+        int[,] innerIdx = new int[H + 1, H + 1];
+        for (int j = 0; j <= H; j++)
+        {
+            float z = Mathf.Lerp(minHZ, maxHZ, j / (float)H);
+            for (int i = 0; i <= H; i++)
+            {
+                float x = Mathf.Lerp(minHX, maxHX, i / (float)H);
+                innerIdx[i, j] = verts.Count;
+                verts.Add(new Vector3(x, 0f, z));
+                uvsL.Add(new Vector2(x / areaSize, z / areaSize));
+            }
+        }
+        for (int j = 0; j < H; j++)
+        {
+            for (int i = 0; i < H; i++)
+            {
+                int a = innerIdx[i, j];
+                int b = innerIdx[i + 1, j];
+                int c = innerIdx[i, j + 1];
+                int d = innerIdx[i + 1, j + 1];
+                tris.Add(a); tris.Add(d); tris.Add(b);
+                tris.Add(a); tris.Add(c); tris.Add(d);
+            }
+        }
+
+        // 2) Outer rings
+        float prevMinX = minHX, prevMaxX = maxHX, prevMinZ = minHZ, prevMaxZ = maxHZ;
+        int ringCount = Mathf.Min(lodRingWidths.Length, lodRingRes.Length);
+
+        for (int r = 0; r < ringCount; r++)
+        {
+            float w = Mathf.Max(0.01f, lodRingWidths[r]);
+            int R = Mathf.Max(1, lodRingRes[r]);
+
+            float newMinX = prevMinX - w;
+            float newMaxX = prevMaxX + w;
+            float newMinZ = prevMinZ - w;
+            float newMaxZ = prevMaxZ + w;
+
+            int rowsAcross = (ringThicknessCells > 1)
+                ? ringThicknessCells
+                : Mathf.Max(1, Mathf.RoundToInt(w / Mathf.Max(1f, targetCellSize)));
+
+            AddStripX(newMinX, newMaxX, prevMaxZ, newMaxZ, R, rowsAcross, ref verts, ref uvsL, ref tris, areaSize);
+            AddStripX(newMinX, newMaxX, newMinZ, prevMinZ, R, rowsAcross, ref verts, ref uvsL, ref tris, areaSize);
+            AddStripZ(newMinX, prevMinX, prevMinZ, prevMaxZ, R, rowsAcross, ref verts, ref uvsL, ref tris, areaSize);
+            AddStripZ(prevMaxX, newMaxX, prevMinZ, prevMaxZ, R, rowsAcross, ref verts, ref uvsL, ref tris, areaSize);
+
+            prevMinX = newMinX; prevMaxX = newMaxX;
+            prevMinZ = newMinZ; prevMaxZ = newMaxZ;
+        }
+
+        vertices = verts.ToArray();
+        triangles = tris.ToArray();
+        uvs = uvsL.ToArray();
+    }
+
+    private static void AddStripX(
+        float x0, float x1, float z0, float z1,
+        int colsAlong, int rowsAcross,
+        ref System.Collections.Generic.List<Vector3> verts,
+        ref System.Collections.Generic.List<Vector2> uvs,
+        ref System.Collections.Generic.List<int> tris,
+        float areaSize)
+    {
+        int cols = Mathf.Max(1, colsAlong);
+        int rows = Mathf.Max(1, rowsAcross);
+
+        int[,] idx = new int[cols + 1, rows + 1];
+
+        for (int j = 0; j <= rows; j++)
+        {
+            float z = Mathf.Lerp(z0, z1, j / (float)rows);
+            for (int i = 0; i <= cols; i++)
+            {
+                float x = Mathf.Lerp(x0, x1, i / (float)cols);
+                idx[i, j] = verts.Count;
+                verts.Add(new Vector3(x, 0f, z));
+                uvs.Add(new Vector2(x / areaSize, z / areaSize));
+            }
+        }
+        for (int j = 0; j < rows; j++)
+            for (int i = 0; i < cols; i++)
+            {
+                int a = idx[i, j];
+                int b = idx[i + 1, j];
+                int c = idx[i, 1 + j];
+                int d = idx[i + 1, 1 + j];
+                tris.Add(a); tris.Add(d); tris.Add(b);
+                tris.Add(a); tris.Add(c); tris.Add(d);
+            }
+    }
+
+    private static void AddStripZ(
+        float x0, float x1, float z0, float z1,
+        int colsAlong, int rowsAcross,
+        ref System.Collections.Generic.List<Vector3> verts,
+        ref System.Collections.Generic.List<Vector2> uvs,
+        ref System.Collections.Generic.List<int> tris,
+        float areaSize)
+    {
+        int cols = Mathf.Max(1, rowsAcross); // thickness along X
+        int rows = Mathf.Max(1, colsAlong);  // along Z
+
+        int[,] idx = new int[cols + 1, rows + 1];
+
+        for (int j = 0; j <= rows; j++)
+        {
+            float z = Mathf.Lerp(z0, z1, j / (float)rows);
+            for (int i = 0; i <= cols; i++)
+            {
+                float x = Mathf.Lerp(x0, x1, i / (float)cols);
+                idx[i, j] = verts.Count;
+                verts.Add(new Vector3(x, 0f, z));
+                uvs.Add(new Vector2(x / areaSize, z / areaSize));
+            }
+        }
+        for (int j = 0; j < rows; j++)
+            for (int i = 0; i < cols; i++)
+            {
+                int a = idx[i, j];
+                int b = idx[i + 1, j];
+                int c = idx[i, 1 + j];
+                int d = idx[i + 1, 1 + j];
+                tris.Add(a); tris.Add(d); tris.Add(b);
+                tris.Add(a); tris.Add(c); tris.Add(d);
+            }
+    }
+
+    // ---------- Height & normal sampling ----------
+
+    /// <summary>Returns water height at a given world position (nearest-vertex, local-space safe).</summary>
+    public float GetHeightAt(Vector3 worldPos)
+    {
+        if (vertices == null || vertices.Length == 0)
+            return transform.position.y;
+
+        // Convert query point to mesh local space
+        Vector3 local = transform.InverseTransformPoint(worldPos);
+
+        // Find nearest vertex in local XZ
+        int closest = 0;
+        float bestD2 = float.PositiveInfinity;
+        for (int i = 0; i < vertices.Length; i++)
+        {
+            Vector3 v = vertices[i];
+            float dx = v.x - local.x;
+            float dz = v.z - local.z;
+            float d2 = dx * dx + dz * dz;
+            if (d2 < bestD2) { bestD2 = d2; closest = i; }
+        }
+
+        // Convert that local Y back to world Y
+        float yLocal = vertices[closest].y;
+        return transform.TransformPoint(new Vector3(0f, yLocal, 0f)).y;
+    }
+
+    /// <summary>Approximates the surface normal at worldPos by 4-sample gradient.</summary>
+    public Vector3 GetNormalAt(Vector3 worldPos, float sampleRadius = 0.5f)
+    {
+        float dx = Mathf.Max(0.05f, sampleRadius);
+        float dz = Mathf.Max(0.05f, sampleRadius);
+
+        float hL = GetHeightAt(worldPos + new Vector3(-dx, 0f, 0f));
+        float hR = GetHeightAt(worldPos + new Vector3(dx, 0f, 0f));
+        float hD = GetHeightAt(worldPos + new Vector3(0f, 0f, -dz));
+        float hU = GetHeightAt(worldPos + new Vector3(0f, 0f, dz));
+
+        float slopeX = (hR - hL) / (2f * dx);
+        float slopeZ = (hU - hD) / (2f * dz);
+
+        Vector3 n = new Vector3(-slopeX, 1f, -slopeZ);
+        return n.normalized;
+    }
+
+    // ---------- Native arrays & copying ----------
+
+    private void EnsureVertexArray()
+    {
+        if (vertexData.IsCreated) vertexData.Dispose();
+        vertexData = new NativeArray<float3>(vertices.Length, Allocator.Persistent);
+        lastVertexCount = vertices.Length;
+    }
+
+    private void EnsureUVArray()
+    {
+        if (uvData.IsCreated) uvData.Dispose();
+        uvData = new NativeArray<float2>(uvs.Length, Allocator.Persistent);
+    }
+
+    private void EnsureOctaveArray()
+    {
+        if (octaveData.IsCreated) octaveData.Dispose();
         octaveData = new NativeArray<OctaveData>(octaves.Length, Allocator.Persistent);
+        lastOctaveCount = octaves.Length;
+    }
+
+    private void CopyMeshVerticesToNative()
+    {
+        for (int i = 0; i < vertices.Length; i++)
+            vertexData[i] = vertices[i];
+    }
+
+    private void CopyMeshUVsToNative()
+    {
+        for (int i = 0; i < uvs.Length; i++)
+            uvData[i] = new float2(uvs[i].x, uvs[i].y);
+    }
+
+    private void CopyOctavesToNative()
+    {
         for (int i = 0; i < octaves.Length; i++)
         {
             var o = octaves[i];
@@ -87,199 +427,55 @@ public class Waves : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Releases native arrays when the object is destroyed.
-    /// </summary>
-    private void OnDestroy()
+    private void DisposeArrays()
     {
         if (vertexData.IsCreated) vertexData.Dispose();
+        if (uvData.IsCreated) uvData.Dispose();
         if (octaveData.IsCreated) octaveData.Dispose();
     }
 
-    /// <summary>
-    /// Updates the mesh vertices each frame using the WavesJob.
-    /// Octave data and environmental influences are refreshed from inspector values.
-    /// </summary>
-    void Update()
+    // ---------- Gizmos ----------
+
+    private void OnDrawGizmos()
     {
-        // Update octave native data with latest inspector values
-        for (int i = 0; i < octaves.Length; i++)
-        {
-            octaveData[i] = new OctaveData
-            {
-                scale = octaves[i].scale,
-                speed = octaves[i].speed,
-                height = octaves[i].height,
-                perlinBlend = octaves[i].perlinBlend,
-                baseScaleMultiplier = octaves[i].baseScaleMultiplier,
-                active = octaves[i].active,
-                windResponse = octaves[i].windResponse,
-                currentResponse = octaves[i].currentResponse
-            };
-        }
-
-        // Normalize wind and current directions
-        windDirection = windDirection.sqrMagnitude > 0f ? windDirection.normalized : Vector2.zero;
-        currentDirection = currentDirection.sqrMagnitude > 0f ? currentDirection.normalized : Vector2.zero;
-
-        // Set up and schedule the wave simulation job
-        var job = new WavesJob
-        {
-            dimensions = dimensions,
-            time = Time.time,
-            vertices = vertexData,
-            windDirection = windDirection.normalized,
-            windStrength = Mathf.Clamp01(windStrength),
-            currentDirection = currentDirection.normalized,
-            currentStrength = Mathf.Clamp01(currentStrength),
-            octaves = octaveData
-        };
-
-        JobHandle handle = job.Schedule(vertexData.Length, 64);
-        handle.Complete();
-
-        // Copy updated vertex positions back to the mesh
-        Vector3[] updatedVerts = new Vector3[vertexData.Length];
-        for (int i = 0; i < vertexData.Length; i++)
-            updatedVerts[i] = vertexData[i];
-
-        mesh.vertices = updatedVerts;
-        mesh.RecalculateNormals();
+        if (Camera.main == null) return;
+        Vector3 center = GetCubeCenter();
+        Vector3 size = new Vector3(lodCubeSize, lodCubeSize, lodCubeSize);
+        Gizmos.color = Color.cyan; Gizmos.DrawWireCube(center, size);
+        Gizmos.color = Color.blue; Gizmos.DrawSphere(center, 2f);
     }
 
-    /// <summary>
-    /// Generates the initial grid of mesh vertices.
-    /// </summary>
-    /// <returns>Array of vertex positions.</returns>
-    private Vector3[] GenerateVertices()
-    {
-        Vector3[] vertices = new Vector3[(dimensions + 1) * (dimensions + 1)];
-        for (int i = 0; i <= dimensions; i++)
-        {
-            for (int j = 0; j <= dimensions; j++)
-            {
-                vertices[Index(i, j)] = new Vector3(i * meshScale, 0, j * meshScale);
-            }
-        }
-        return vertices;
-    }
+    // ---------- Types & utils ----------
 
-    /// <summary>
-    /// Generates triangle indices for the mesh grid.
-    /// </summary>
-    /// <returns>Array of triangle indices.</returns>
-    private int[] GenerateTriangles()
-    {
-        int[] triangles = new int[dimensions * dimensions * 6];
-        int t = 0;
-
-        for (int i = 0; i < dimensions; i++)
-        {
-            for (int j = 0; j < dimensions; j++)
-            {
-                int a = Index(i, j);
-                int b = Index(i + 1, j);
-                int c = Index(i, j + 1);
-                int d = Index(i + 1, j + 1);
-
-                triangles[t++] = a;
-                triangles[t++] = d;
-                triangles[t++] = b;
-
-                triangles[t++] = a;
-                triangles[t++] = c;
-                triangles[t++] = d;
-            }
-        }
-        return triangles;
-    }
-
-    /// <summary>
-    /// Generates UV coordinates for the mesh grid.
-    /// </summary>
-    /// <returns>Array of UV coordinates.</returns>
-    private Vector2[] GenerateUVs()
-    {
-        Vector2[] uvs = new Vector2[(dimensions + 1) * (dimensions + 1)];
-        for (int i = 0; i <= dimensions; i++)
-        {
-            for (int j = 0; j <= dimensions; j++)
-            {
-                uvs[Index(i, j)] = new Vector2((float)i / dimensions, (float)j / dimensions);
-            }
-        }
-        return uvs;
-    }
-
-    /// <summary>
-    /// Gets the interpolated height of the water surface at a given world position.
-    /// </summary>
-    /// <param name="position">World position to sample.</param>
-    /// <returns>Height of the water surface at the position.</returns>
-    public float GetHeightAt(Vector3 position)
-    {
-        // Convert to local space (ignore Y)
-        Vector3 localPos = transform.InverseTransformPoint(position);
-
-        // Find grid cell
-        float x = Mathf.Clamp(localPos.x, 0, dimensions);
-        float z = Mathf.Clamp(localPos.z, 0, dimensions);
-
-        int x0 = Mathf.FloorToInt(x);
-        int z0 = Mathf.FloorToInt(z);
-        int x1 = Mathf.Min(x0 + 1, dimensions);
-        int z1 = Mathf.Min(z0 + 1, dimensions);
-
-        // Interpolation weights
-        float u = x - x0;
-        float v = z - z0;
-
-        // Get heights from surrounding vertices
-        float h00 = mesh.vertices[Index(x0, z0)].y;
-        float h10 = mesh.vertices[Index(x1, z0)].y;
-        float h01 = mesh.vertices[Index(x0, z1)].y;
-        float h11 = mesh.vertices[Index(x1, z1)].y;
-
-        // Bilinear interpolation
-        float height = (1 - u) * (1 - v) * h00
-                     + u * (1 - v) * h10
-                     + (1 - u) * v * h01
-                     + u * v * h11;
-
-        // Convert back to world Y
-        return transform.TransformPoint(new Vector3(0, height, 0)).y;
-    }
-
-    /// <summary>
-    /// Converts 2D grid coordinates to 1D array index.
-    /// </summary>
-    private int Index(int i, int j) => i * (dimensions + 1) + j;
-
-    /// <summary>
-    /// Struct for configuring individual wave octaves.
-    /// </summary>
     [Serializable]
     public struct Octave
     {
-        /// <summary>Speed of the wave movement for this octave.</summary>
         public Vector2 speed;
-        /// <summary>Scale of the wave pattern for this octave.</summary>
         public Vector2 scale;
-        /// <summary>Amplitude (height) of the wave for this octave.</summary>
         public float height;
-        /// <summary>Blend factor between sine/cosine and perlin noise (0=sine, 1=perlin).</summary>
         [Range(0f, 1f)] public float perlinBlend;
-        /// <summary>Multiplier for base scale (used for first octaves).</summary>
         public float baseScaleMultiplier;
-        /// <summary>If true, this octave is active in the simulation.</summary>
         public bool active;
-
-        /// <summary>How much this octave responds to wind (0 = none, 1 = full).</summary>
-        [Tooltip("How much this octave reacts to wind (0 = none, 1 = full)")]
         [Range(0f, 2f)] public float windResponse;
-
-        /// <summary>How much this octave responds to current (0 = none, 1 = full).</summary>
-        [Tooltip("How much this octave reacts to current (0 = none, 1 = full)")]
         [Range(0f, 2f)] public float currentResponse;
+    }
+
+    private static int HashArray(int[] arr)
+    {
+        unchecked
+        {
+            int h = 17;
+            for (int i = 0; i < arr.Length; i++) h = h * 31 + arr[i];
+            return h;
+        }
+    }
+    private static int HashArray(float[] arr)
+    {
+        unchecked
+        {
+            int h = 17;
+            for (int i = 0; i < arr.Length; i++) h = h * 31 + arr[i].GetHashCode();
+            return h;
+        }
     }
 }

@@ -3,88 +3,92 @@ using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
 
-/// <summary>
-/// Parallel job for updating mesh vertices to simulate dynamic water waves.
-/// Each vertex's height is calculated using multiple octaves, wind, and current influences.
-/// </summary>
 [BurstCompile]
 public struct WavesJob : IJobParallelFor
 {
-    /// <summary>Array of octave parameters controlling wave layers.</summary>
     [ReadOnly] public NativeArray<OctaveData> octaves;
-    /// <summary>Array of mesh vertices to be updated.</summary>
     public NativeArray<float3> vertices;
-    /// <summary>Mesh grid dimension (number of vertices per side minus one).</summary>
-    public int dimensions;
-    /// <summary>Current simulation time.</summary>
+    [ReadOnly] public NativeArray<float2> uvs;
+
+    public int virtualDimensions;
     public float time;
-    /// <summary>Strength of wind affecting the waves.</summary>
+
     public float windStrength;
-    /// <summary>Direction of wind as a 2D vector.</summary>
     public float2 windDirection;
-    /// <summary>Strength of water current affecting the waves.</summary>
     public float currentStrength;
-    /// <summary>Direction of water current as a 2D vector.</summary>
     public float2 currentDirection;
 
-    /// <summary>
-    /// Calculates the new height for each vertex based on all active octaves and environmental influences.
-    /// </summary>
-    /// <param name="index">Index of the vertex in the mesh array.</param>
     public void Execute(int index)
     {
-        // Convert flat index to grid coordinates
-        int x = index / (dimensions + 1);
-        int y = index % (dimensions + 1);
+        float3 v = vertices[index];
+        float3 outV = v;
+
+        float2 windDir = math.lengthsq(windDirection) > 0f ? math.normalize(windDirection) : float2.zero;
+        float2 curDir = math.lengthsq(currentDirection) > 0f ? math.normalize(currentDirection) : float2.zero;
+
+        const float EPS = 1e-4f;
+        int dims = math.max(1, virtualDimensions);
+
+        float2 uv = uvs[index];
+        float xCoord = uv.x;
+        float yCoord = uv.y;
+        float gx = uv.x * dims;
+        float gy = uv.y * dims;
 
         float height = 0f;
-        float xCoord = (float)x / dimensions;
-        float yCoord = (float)y / dimensions;
+        int lastOctaveIndex = octaves.Length - 1;
 
-        // Accumulate height from all active octaves
         for (int i = 0; i < octaves.Length; i++)
         {
-            var octave = octaves[i];
-            if (!octave.active) continue;
+            var oc = octaves[i];
+            if (!oc.active) continue;
 
-            // For first two octaves, apply base scale multiplier
-            float2 scale = octave.scale * (i < 2 ? octave.baseScaleMultiplier : 1f);
+            float baseMul = (i < 2) ? math.max(oc.baseScaleMultiplier, EPS) : 1f;
 
-            float2 pos = new float2(x * scale.x, y * scale.y);
+            float2 s = new float2(
+                math.max(math.abs(oc.scale.x) * baseMul, EPS),
+                math.max(math.abs(oc.scale.y) * baseMul, EPS)
+            );
 
-            // Calculate wind and current influence factors
-            float windFactor = math.clamp(dimensions / 100f, 1f, 10f);
-            float currentFactor = windFactor * 0.5f;
-            float2 windOffset = math.normalize(windDirection) * windStrength * windFactor;
-            float2 currentOffset = math.normalize(currentDirection) * currentStrength * currentFactor;
-            float2 totalInfluence = octave.speed + windOffset + currentOffset;
+            float2 pos = new float2(gx * s.x, gy * s.y);
 
-            // Time-based offset for animation
-            float timeScale = 0.01f;
-            float2 timeVec = time * totalInfluence * timeScale;
+            // --- SPEED INFLUENCE ---
+            float windSpeedInfluence = 0.05f; // default small effect
+            if (i == lastOctaveIndex) // last octave gets big wind speed boost
+                windSpeedInfluence = 0.25f;
 
-            // Sine and cosine wave for base shape
-            float sine = math.sin(pos.x + timeVec.x) + math.cos(pos.y + timeVec.y);
+            float currentSpeedInfluence = 0.05f; // minimal effect from current on speed
 
-            // Perlin noise for natural randomness
-            float2 noiseInput = new float2(xCoord * scale.x + timeVec.x, yCoord * scale.y + timeVec.y);
-            float perlin = noise.cnoise(noiseInput); // Range: -1 to 1
+            float2 flowVec = windDir * windStrength * oc.windResponse * windSpeedInfluence
+                           + curDir * currentStrength * oc.currentResponse * currentSpeedInfluence;
 
-            // Blend between sine/cosine and perlin noise
-            float blend = math.clamp(octave.perlinBlend, 0f, 1f);
+            float2 phaseVel = oc.speed + flowVec;
+
+            // --- TIME OFFSET ---
+            float2 tvec = phaseVel * (0.01f * time);
+
+            // --- SHAPE ---
+            float sine = math.sin(pos.x + tvec.x) + math.cos(pos.y + tvec.y);
+
+            float2 noiseInput = new float2(xCoord * s.x + tvec.x, yCoord * s.y + tvec.y);
+            float perlin = noise.cnoise(noiseInput);
+
+            float blend = math.clamp(oc.perlinBlend, 0f, 1f);
             float wave = math.lerp(sine, perlin, blend);
 
-            // Amplify height based on wind and current response
-            float windAmp = math.pow(math.clamp(windStrength, 0f, 1f), 1.5f) * octave.windResponse;
-            float currentAmp = math.pow(math.clamp(currentStrength, 0f, 1f), 1.3f) * octave.currentResponse;
+            // --- HEIGHT INFLUENCE ---
+            float ampFromEnv = 1f;
+            if (i == 0) // first octave gets big current strength effect on height
+                ampFromEnv += currentStrength * oc.currentResponse * 1.2f;
+            else
+                ampFromEnv += (windStrength * oc.windResponse + currentStrength * oc.currentResponse) * 0.3f;
 
-            float dynamicHeight = octave.height * (1f + windAmp + currentAmp);
-            height += wave * dynamicHeight;
+            float dynH = oc.height * ampFromEnv;
+
+            height += wave * dynH;
         }
 
-        // Update vertex height
-        float3 vertex = vertices[index];
-        vertex.y = height;
-        vertices[index] = vertex;
+        outV.y = height;
+        vertices[index] = outV;
     }
 }

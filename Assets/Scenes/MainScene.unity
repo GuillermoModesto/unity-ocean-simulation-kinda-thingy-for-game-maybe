@@ -394,6 +394,10 @@ PrefabInstance:
       value: 300
       objectReference: {fileID: 0}
     - target: {fileID: 2544179778998594948, guid: d43bb1b3d0f6dbe4588904e161bc11e7, type: 3}
+      propertyPath: lodCubeSize
+      value: 300
+      objectReference: {fileID: 0}
+    - target: {fileID: 2544179778998594948, guid: d43bb1b3d0f6dbe4588904e161bc11e7, type: 3}
       propertyPath: targetCamera
       value: 
       objectReference: {fileID: 961739752}
@@ -412,6 +416,10 @@ PrefabInstance:
     - target: {fileID: 2544179778998594948, guid: d43bb1b3d0f6dbe4588904e161bc11e7, type: 3}
       propertyPath: lodDistances.Array.size
       value: 4
+      objectReference: {fileID: 0}
+    - target: {fileID: 2544179778998594948, guid: d43bb1b3d0f6dbe4588904e161bc11e7, type: 3}
+      propertyPath: overrideInspectorOnStart
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 2544179778998594948, guid: d43bb1b3d0f6dbe4588904e161bc11e7, type: 3}
       propertyPath: lodResolutions.Array.size
@@ -434,6 +442,26 @@ PrefabInstance:
       value: 500
       objectReference: {fileID: 0}
     - target: {fileID: 2544179778998594948, guid: d43bb1b3d0f6dbe4588904e161bc11e7, type: 3}
+      propertyPath: 'lodRingWidths.Array.data[0]'
+      value: 200
+      objectReference: {fileID: 0}
+    - target: {fileID: 2544179778998594948, guid: d43bb1b3d0f6dbe4588904e161bc11e7, type: 3}
+      propertyPath: 'lodRingWidths.Array.data[1]'
+      value: 300
+      objectReference: {fileID: 0}
+    - target: {fileID: 2544179778998594948, guid: d43bb1b3d0f6dbe4588904e161bc11e7, type: 3}
+      propertyPath: 'lodRingWidths.Array.data[2]'
+      value: 400
+      objectReference: {fileID: 0}
+    - target: {fileID: 2544179778998594948, guid: d43bb1b3d0f6dbe4588904e161bc11e7, type: 3}
+      propertyPath: 'lodRingWidths.Array.data[3]'
+      value: 500
+      objectReference: {fileID: 0}
+    - target: {fileID: 2544179778998594948, guid: d43bb1b3d0f6dbe4588904e161bc11e7, type: 3}
+      propertyPath: 'lodRingWidths.Array.data[4]'
+      value: 600
+      objectReference: {fileID: 0}
+    - target: {fileID: 2544179778998594948, guid: d43bb1b3d0f6dbe4588904e161bc11e7, type: 3}
       propertyPath: 'lodResolutions.Array.data[3]'
       value: 5
       objectReference: {fileID: 0}
@@ -446,12 +474,44 @@ PrefabInstance:
       value: 2
       objectReference: {fileID: 0}
     - target: {fileID: 2544179778998594948, guid: d43bb1b3d0f6dbe4588904e161bc11e7, type: 3}
+      propertyPath: octaves.Array.data[0].scale.x
+      value: 0.05
+      objectReference: {fileID: 0}
+    - target: {fileID: 2544179778998594948, guid: d43bb1b3d0f6dbe4588904e161bc11e7, type: 3}
+      propertyPath: octaves.Array.data[0].scale.y
+      value: 0.05
+      objectReference: {fileID: 0}
+    - target: {fileID: 2544179778998594948, guid: d43bb1b3d0f6dbe4588904e161bc11e7, type: 3}
+      propertyPath: octaves.Array.data[1].scale.x
+      value: 0.2
+      objectReference: {fileID: 0}
+    - target: {fileID: 2544179778998594948, guid: d43bb1b3d0f6dbe4588904e161bc11e7, type: 3}
+      propertyPath: octaves.Array.data[1].scale.y
+      value: 0.21
+      objectReference: {fileID: 0}
+    - target: {fileID: 2544179778998594948, guid: d43bb1b3d0f6dbe4588904e161bc11e7, type: 3}
+      propertyPath: octaves.Array.data[2].scale.x
+      value: 1.1
+      objectReference: {fileID: 0}
+    - target: {fileID: 2544179778998594948, guid: d43bb1b3d0f6dbe4588904e161bc11e7, type: 3}
+      propertyPath: octaves.Array.data[2].scale.y
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 2544179778998594948, guid: d43bb1b3d0f6dbe4588904e161bc11e7, type: 3}
+      propertyPath: octaves.Array.data[3].scale.x
+      value: 3.7
+      objectReference: {fileID: 0}
+    - target: {fileID: 2544179778998594948, guid: d43bb1b3d0f6dbe4588904e161bc11e7, type: 3}
+      propertyPath: octaves.Array.data[3].scale.y
+      value: 2.7
+      objectReference: {fileID: 0}
+    - target: {fileID: 2544179778998594948, guid: d43bb1b3d0f6dbe4588904e161bc11e7, type: 3}
       propertyPath: octaves.Array.data[4].scale.x
-      value: 12
+      value: 70
       objectReference: {fileID: 0}
     - target: {fileID: 2544179778998594948, guid: d43bb1b3d0f6dbe4588904e161bc11e7, type: 3}
       propertyPath: octaves.Array.data[4].scale.y
-      value: 7
+      value: 60
       objectReference: {fileID: 0}
     - target: {fileID: 2544179778998594948, guid: d43bb1b3d0f6dbe4588904e161bc11e7, type: 3}
       propertyPath: octaves.Array.data[4].speed.x
@@ -461,6 +521,10 @@ PrefabInstance:
       propertyPath: octaves.Array.data[4].windResponse
       value: 1.6
       objectReference: {fileID: 0}
+    - target: {fileID: 5957861197510496107, guid: d43bb1b3d0f6dbe4588904e161bc11e7, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: 221f74bb4cb7df44f8ce1b6d027e09d8, type: 2}
     - target: {fileID: 7912224668665174050, guid: d43bb1b3d0f6dbe4588904e161bc11e7, type: 3}
       propertyPath: m_Name
       value: Waves
@@ -468,7 +532,10 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 7912224668665174050, guid: d43bb1b3d0f6dbe4588904e161bc11e7, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1530363806}
   m_SourcePrefab: {fileID: 100100000, guid: d43bb1b3d0f6dbe4588904e161bc11e7, type: 3}
 --- !u!1 &961739749
 GameObject:
@@ -602,7 +669,7 @@ Transform:
   m_GameObject: {fileID: 961739749}
   serializedVersion: 2
   m_LocalRotation: {x: 0.2524915, y: 0, z: 0, w: 0.96759915}
-  m_LocalPosition: {x: 35.49, y: 23.8, z: 1.1}
+  m_LocalPosition: {x: 35.49, y: 33.8, z: 1.1}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -780,7 +847,16 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   airDrag: 1
   waterDrag: 10
+  waterAngularDrag: 2
+  buoyancy: 1.5
+  maxBuoyancyDepth: 0.5
+  deepSubmergeTorqueBlend: 0.2
+  fullSubmergedDepth: 0.15
+  maxAngularVelInWater: 2.5
   affectDirection: 1
+  uprightTorque: 8
+  uprightDamping: 0.35
+  normalSampleRadius: 0.75
   attachToSurface: 0
   floatPoints:
   - {fileID: 1368742002}
@@ -814,6 +890,35 @@ Rigidbody:
   m_Interpolate: 0
   m_Constraints: 0
   m_CollisionDetection: 0
+--- !u!1 &1530363801 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 7912224668665174050, guid: d43bb1b3d0f6dbe4588904e161bc11e7, type: 3}
+  m_PrefabInstance: {fileID: 769671517}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &1530363804 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 2544179778998594948, guid: d43bb1b3d0f6dbe4588904e161bc11e7, type: 3}
+  m_PrefabInstance: {fileID: 769671517}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1530363801}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7505789fa747b394c9f9e90ea8c9df99, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+--- !u!114 &1530363806
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1530363801}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0fc9d834c42558b46902dd211b8a0bce, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  waves: {fileID: 1530363804}
 --- !u!1 &1840105882
 GameObject:
   m_ObjectHideFlags: 0
@@ -858,6 +963,18 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: 5019347075184715154, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
+      propertyPath: buoyancy
+      value: 15
+      objectReference: {fileID: 0}
+    - target: {fileID: 5019347075184715154, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
+      propertyPath: attachToSurface
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5019347075184715154, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
+      propertyPath: maxBuoyancyDepth
+      value: 0.7
+      objectReference: {fileID: 0}
     - target: {fileID: 7007355088067304322, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
       propertyPath: m_Name
       value: boat
