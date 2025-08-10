@@ -102,7 +102,7 @@ public class Waves : MonoBehaviour
             new Octave {
                 speed = new Vector2(6.08f, 2.38f),
                 scale = new Vector2(0.2f, 0.4f),   // ~7m wavelength
-                height = 2.1f,                       // was 0.8f
+                height = 1.6f,                       // was 0.8f
                 perlinBlend = 0.82f,
                 baseScaleMultiplier = 1f,
                 active = true,
@@ -114,7 +114,7 @@ public class Waves : MonoBehaviour
             new Octave {
                 speed = new Vector2(3.93f, 2.91f),
                 scale = new Vector2(0.4f, 0.4f),     // ~2.5m wavelength
-                height = 2f,                       // was 0.35f
+                height = 1.1f,                       // was 0.35f
                 perlinBlend = 1f,
                 baseScaleMultiplier = 1f,
                 active = true,
@@ -126,7 +126,7 @@ public class Waves : MonoBehaviour
             new Octave {
                 speed = new Vector2(28f, 12f),
                 scale = new Vector2(0.9f, 0.9f),     // ~1.1m wavelength
-                height = 1.4f,                       // was 0.15f
+                height = 0.8f,                       // was 0.15f
                 perlinBlend = 0.7f,
                 baseScaleMultiplier = 1f,
                 active = true,
