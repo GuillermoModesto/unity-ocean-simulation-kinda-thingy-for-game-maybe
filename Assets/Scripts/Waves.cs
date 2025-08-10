@@ -133,6 +133,18 @@ public class Waves : MonoBehaviour
                 windResponse = 1.5f,
                 currentResponse = 0.2f,
                 scaleFrequencyBoost = 0f             // was 6f
+            },
+            // 5. Periodic longer waves
+            new Octave {
+                speed = new Vector2(20f, 10f),
+                scale = new Vector2(0.4f, 0.65f),     // ~1.1m wavelength
+                height = 2f,                       // was 0.15f
+                perlinBlend = 0.8f,
+                baseScaleMultiplier = 1f,
+                active = true,
+                windResponse = 1.5f,
+                currentResponse = 0.2f,
+                scaleFrequencyBoost = 0f             // was 6f
             }
             };
         }
