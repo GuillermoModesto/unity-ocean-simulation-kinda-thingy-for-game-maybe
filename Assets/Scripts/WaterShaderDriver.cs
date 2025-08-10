@@ -6,6 +6,7 @@ public class WaterShaderDriver : MonoBehaviour
     static readonly int ID_WindDir = Shader.PropertyToID("_WindDir");
     static readonly int ID_CurrentDir = Shader.PropertyToID("_CurrentDir");
     static readonly int ID_WaveTime = Shader.PropertyToID("_WaveTime");
+    static readonly int ID_SeaLevel = Shader.PropertyToID("_SeaLevel");
 
     public Waves waves; // assign in Inspector; if left null, it tries to find one
     Renderer rend;
@@ -31,6 +32,7 @@ public class WaterShaderDriver : MonoBehaviour
         mpb.SetVector(ID_CurrentDir, new Vector4(cDir.x, cDir.y, 0f, waves.currentStrength));
         mpb.SetFloat(ID_WaveTime, Time.time);
 
+        mpb.SetFloat(ID_SeaLevel, waves.transform.position.y);
         rend.SetPropertyBlock(mpb);
     }
 }
