@@ -2,15 +2,20 @@
 {
     Properties
     {
-        // --- Tropical color ramp (7 stops + rim) ---
-        _DeepColor      ("Deep (ocean)", Color)      = (0.01, 0.11, 0.20, 1)
-        _BlueColor      ("Blue (offshore)", Color)   = (0.00, 0.28, 0.50, 1)
-        _MidColor       ("Mid / Teal", Color)        = (0.06, 0.35, 0.55, 1)
-        _EmeraldColor   ("Emerald", Color)           = (0.02, 0.55, 0.46, 1)
-        _AquaColor      ("Aqua", Color)              = (0.18, 0.78, 0.85, 1)
-        _ShallowColor   ("Shallow", Color)           = (0.32, 0.90, 0.86, 1)
-        _SandColor      ("Sand / Shore", Color)      = (0.86, 0.88, 0.84, 1)
-        _RimColor       ("Rim (Fresnel) Color", Color)= (0.80, 0.97, 1.00, 1)
+        // --- Tropical color ramp (more stops + rim) ---
+        _AbyssColor    ("Abyss", Color)             = (0.005, 0.06, 0.12, 1)
+        _DeepColor     ("Deep (ocean)", Color)      = (0.01,  0.11, 0.20, 1)
+        _BlueColor     ("Blue (offshore)", Color)   = (0.00,  0.28, 0.50, 1)
+        _CobaltColor   ("Cobalt", Color)            = (0.00,  0.36, 0.62, 1)
+        _MidColor      ("Mid / Teal", Color)        = (0.06,  0.35, 0.55, 1)
+        _JadeColor     ("Jade", Color)              = (0.02,  0.47, 0.50, 1)
+        _EmeraldColor  ("Emerald", Color)           = (0.02,  0.55, 0.46, 1)
+        _AquaColor     ("Aqua", Color)              = (0.18,  0.78, 0.85, 1)
+        _TurquoiseColor("Turquoise", Color)         = (0.24,  0.88, 0.86, 1)
+        _MintColor     ("Mint", Color)              = (0.64,  0.93, 0.90, 1)
+        _ShallowColor  ("Shallow", Color)           = (0.72,  0.96, 0.92, 1)
+        _SandColor     ("Sand / Shore", Color)      = (0.86,  0.88, 0.84, 1)
+        _RimColor      ("Rim (Fresnel) Color", Color)= (0.80, 0.97, 1.00, 1)
 
         _SandStrength   ("Sand Strength", Range(0,1)) = 0.35
         _SandSaturation ("Sand Saturation", Range(0,1)) = 0.7
@@ -59,7 +64,7 @@
         _AlphaBase      ("Base Alpha", Range(0,1)) = 0.55
         _AlphaFresnel   ("Fresnel Alpha Boost", Range(0,1)) = 0.35
 
-        // --- Time / flow (kept for compatibility; not used for normals/foam) ---
+        // --- Time / flow (kept for compat; not used for normals/foam) ---
         _WaveTime       ("Wave Time (seconds)", Float) = 0
         _UseExternalTime("Use External Time (1=yes)", Float) = 0
         _WindDir        ("_WindDir (x,y,w=strength)", Vector) = (1,0,0,1)
@@ -95,8 +100,8 @@
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
             CBUFFER_START(UnityPerMaterial)
-                // ramp
-                float4 _DeepColor, _BlueColor, _MidColor, _EmeraldColor, _AquaColor, _ShallowColor, _SandColor, _RimColor;
+                // ramp colors
+                float4 _AbyssColor, _DeepColor, _BlueColor, _CobaltColor, _MidColor, _JadeColor, _EmeraldColor, _AquaColor, _TurquoiseColor, _MintColor, _ShallowColor, _SandColor, _RimColor;
                 float _SandStrength, _SandSaturation, _SandBrightness;
                 float _SeaLevel, _HeightRange, _RampSoftness, _RampShift;
 
@@ -161,44 +166,47 @@
                 return normalize(r);
             }
 
-            // Piecewise smooth tropical ramp with tunable sand
-            float3 TropicalRamp(float h, float s)
+            // Extended tropical ramp with many in-between colors
+            float3 ExtendedRamp(float h, float s)
             {
-                float k0=0.00, k1=0.12, k2=0.28, k3=0.45, k4=0.62, k5=0.78, k6=0.92;
+                // Keys (even-ish spacing); increase w by softness to widen blends
                 float w = s * 0.06;
-                float3 c;
+                float k0=0.00, k1=0.08, k2=0.16, k3=0.24, k4=0.32, k5=0.42, k6=0.54, k7=0.66, k8=0.78, k9=0.90, kA=0.96;
 
-                if (h < k1)      c = lerp(_DeepColor.rgb,     _BlueColor.rgb,     smoothstep(k0-w, k1+w, h));
-                else if (h < k2) c = lerp(_BlueColor.rgb,     _MidColor.rgb,      smoothstep(k1-w, k2+w, h));
-                else if (h < k3) c = lerp(_MidColor.rgb,      _EmeraldColor.rgb,  smoothstep(k2-w, k3+w, h));
-                else if (h < k4) c = lerp(_EmeraldColor.rgb,  _AquaColor.rgb,     smoothstep(k3-w, k4+w, h));
-                else if (h < k5) c = lerp(_AquaColor.rgb,     _ShallowColor.rgb,  smoothstep(k4-w, k5+w, h));
-                else
-                {
-                    float tSand = smoothstep(k5-w, k6+w, h);
-                    float3 sand = _SandColor.rgb;
-                    float luma = dot(sand, float3(0.299, 0.587, 0.114));
-                    sand = lerp(float3(luma,luma,luma), sand, _SandSaturation) * _SandBrightness;
-                    float3 sandMix = lerp(_ShallowColor.rgb, sand, tSand);
-                    c = lerp(_ShallowColor.rgb, sandMix, _SandStrength);
-                }
-                return c;
+                if (h < k1) return lerp(_AbyssColor.rgb,   _DeepColor.rgb,      smoothstep(k0-w, k1+w, h));
+                if (h < k2) return lerp(_DeepColor.rgb,    _BlueColor.rgb,      smoothstep(k1-w, k2+w, h));
+                if (h < k3) return lerp(_BlueColor.rgb,    _CobaltColor.rgb,    smoothstep(k2-w, k3+w, h));
+                if (h < k4) return lerp(_CobaltColor.rgb,  _MidColor.rgb,       smoothstep(k3-w, k4+w, h));
+                if (h < k5) return lerp(_MidColor.rgb,     _JadeColor.rgb,      smoothstep(k4-w, k5+w, h));
+                if (h < k6) return lerp(_JadeColor.rgb,    _EmeraldColor.rgb,   smoothstep(k5-w, k6+w, h));
+                if (h < k7) return lerp(_EmeraldColor.rgb, _AquaColor.rgb,      smoothstep(k6-w, k7+w, h));
+                if (h < k8) return lerp(_AquaColor.rgb,    _TurquoiseColor.rgb, smoothstep(k7-w, k8+w, h));
+                if (h < k9) return lerp(_TurquoiseColor.rgb,_MintColor.rgb,     smoothstep(k8-w, k9+w, h));
+                if (h < kA) return lerp(_MintColor.rgb,    _ShallowColor.rgb,   smoothstep(k9-w, kA+w, h));
+
+                // Sand: optional & tunable
+                float tSand = smoothstep(kA-w, 1.0, h);
+                float3 sand = _SandColor.rgb;
+                float luma  = dot(sand, float3(0.299, 0.587, 0.114));
+                sand = lerp(float3(luma,luma,luma), sand, _SandSaturation) * _SandBrightness;
+                float3 sandMix = lerp(_ShallowColor.rgb, sand, tSand);
+                return lerp(_ShallowColor.rgb, sandMix, _SandStrength);
             }
 
             float4 frag(Varyings IN) : SV_Target
             {
-                // --- Height → 0..1 ---
+                // Height → 0..1 (driver auto-updates _HeightRange)
                 float halfRange = max(1e-3, _HeightRange * 0.5);
                 float h01 = 0.5 + (IN.worldPos.y - _SeaLevel) / (2.0 * halfRange);
                 h01 = saturate(h01 + _RampShift);
 
-                // --- Base tropical color ---
-                float3 col = TropicalRamp(h01, saturate(_RampSoftness));
+                // Base color from extended ramp
+                float3 col = ExtendedRamp(h01, saturate(_RampSoftness));
 
-                // --- Time (decoupled from wind/current) ---
+                // Time (decoupled)
                 float t = (_UseExternalTime > 0.5) ? _WaveTime : _Time.y;
 
-                // --- Two scrolling normal layers (NO wind/current influence) ---
+                // Two-layer normals (NO wind/current influence)
                 float2 uvA = IN.worldPos.xz * _NormalATiling.xy + _NormalASpeed.xy * t;
                 float2 uvB = IN.worldPos.xz * _NormalBTiling.xy + _NormalBSpeed.xy * t;
 
@@ -210,7 +218,7 @@
                 float3 detailN = mul(float3x3(T,B,up), RNM(nA,nB));
                 float3 combined = normalize(RNM(baseN, detailN));
 
-                // --- Normal tamers ---
+                // Normal tamers
                 float3 camPos = GetCameraPositionWS();
                 float camDist = distance(camPos, IN.worldPos);
                 float distFade = saturate( (_NormalFadeEnd - camDist) / max(1e-3, _NormalFadeEnd - _NormalFadeStart) );
@@ -225,12 +233,11 @@
                 float normalMix = saturate(_NormalStrength * distFade * viewAtten * slopeAtten);
                 float3 N = normalize(lerp(baseN, combined, normalMix));
 
-                // --- Wake sampling (foam + ripple normal) ---
+                // Wake: foam + ripple normal (optional)
                 float2 wakeUV = IN.worldPos.xz * _WakeUV.x + _WakeUV.yz;
                 float wake = SAMPLE_TEXTURE2D(_WakeMap, sampler_WakeMap, wakeUV).r;
 
-                // gradient (finite difference)
-                float2 texel = float2(1.0/1024.0, 1.0/1024.0); // safe default
+                float2 texel = float2(1.0/1024.0, 1.0/1024.0);
                 float wL = SAMPLE_TEXTURE2D(_WakeMap, sampler_WakeMap, wakeUV - float2(texel.x, 0)).r;
                 float wR = SAMPLE_TEXTURE2D(_WakeMap, sampler_WakeMap, wakeUV + float2(texel.x, 0)).r;
                 float wD = SAMPLE_TEXTURE2D(_WakeMap, sampler_WakeMap, wakeUV - float2(0, texel.y)).r;
@@ -240,7 +247,7 @@
                 float3 wakeN = normalize(float3(-grad * 8.0, 1.0));
                 N = normalize(lerp(N, normalize(RNM(N, wakeN)), _WakeNormalStrength));
 
-                // --- Fresnel + simple spec ---
+                // Fresnel + simple spec
                 float fres = pow(saturate(1 - dot(N, V)), _FresnelPower) * _FresnelBoost;
                 Light Lm = GetMainLight();
                 float3 L = normalize(Lm.direction);
@@ -252,23 +259,19 @@
                 col = col + _SpecularColor.rgb * spec * _SpecularStrength;
                 col = lerp(col, _RimColor.rgb, saturate(fres));
 
-                // --- Crest foam (decoupled from wind/current; uses own speed/tiling) ---
+                // Crest foam (decoupled; own speed/tiling)
                 float curv = (length(ddx(N)) + length(ddy(N)));  curv = saturate(curv * 0.75);
                 float peak = smoothstep(1.0 - _FoamHeightBias, 1.0, h01);
-
-                float2 fuv = IN.worldPos.xz * _FoamTiling.xy + _FoamSpeed.xy * t; // <— no flow
+                float2 fuv = IN.worldPos.xz * _FoamTiling.xy + _FoamSpeed.xy * t; // decoupled
                 float noise = SAMPLE_TEXTURE2D(_FoamTex, sampler_FoamTex, fuv).r;
-
                 float crestSlope = pow(1.0 - saturate(dot(N, up)), _FoamSharp);
                 float foamMask = (crestSlope + curv * _FoamCurvAmt) * (0.6 + 0.4*noise) * peak * _FoamAmount;
 
                 // add wake foam
                 foamMask = saturate(foamMask + wake * _WakeFoamStrength);
 
-                // apply foam
+                // apply foam & alpha
                 col = lerp(col, _FoamColor.rgb, foamMask);
-
-                // --- Alpha ---
                 float aOut = saturate(_AlphaBase + fres * _AlphaFresnel);
                 aOut = saturate(aOut + foamMask * 0.15);
 
