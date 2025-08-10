@@ -57,6 +57,11 @@ public class Waves : MonoBehaviour
     private int lastVertexCount = -1;
     private int lastOctaveCount = -1;
 
+    private void Awake()
+    {
+        EnsureDefaultOctaves();
+    }
+
     void Start()
     {
         meshFilter = GetComponent<MeshFilter>();
@@ -74,6 +79,66 @@ public class Waves : MonoBehaviour
 
     void OnDisable() => DisposeArrays();
     void OnDestroy() => DisposeArrays();
+
+    private void EnsureDefaultOctaves()
+    {
+        if (octaves == null || octaves.Length == 0)
+        {
+            octaves = new Octave[]
+            {
+            // 1. Swell - large, slow waves
+            new Octave {
+                speed = new Vector2(0.25f, 0.18f),
+                scale = new Vector2(0.05f, 0.05f),   // ~20m wavelength
+                height = 2.5f,                       // was 1.2f
+                perlinBlend = 0.1f,
+                baseScaleMultiplier = 1f,
+                active = true,
+                windResponse = 0.3f,
+                currentResponse = 0.6f,
+                scaleFrequencyBoost = 2.5f           // was 2f
+            },
+            // 2. Main waves
+            new Octave {
+                speed = new Vector2(2f, 0.38f),
+                scale = new Vector2(0.2f, 0.4f),   // ~7m wavelength
+                height = 1.8f,                       // was 0.8f
+                perlinBlend = 0.82f,
+                baseScaleMultiplier = 1f,
+                active = true,
+                windResponse = 0.6f,
+                currentResponse = 0.4f,
+                scaleFrequencyBoost = 3.5f           // was 3f
+            },
+            // 3. Extra realism ripples
+            new Octave {
+                speed = new Vector2(0.85f, 0.9f),
+                scale = new Vector2(0.4f, 0.4f),     // ~2.5m wavelength
+                height = 2f,                       // was 0.35f
+                perlinBlend = 1f,
+                baseScaleMultiplier = 1f,
+                active = true,
+                windResponse = 1f,
+                currentResponse = 0.3f,
+                scaleFrequencyBoost = 5f             // was 4.5f
+            },
+            // 4. Choppy detail
+            new Octave {
+                speed = new Vector2(28f, 12f),
+                scale = new Vector2(0.9f, 0.9f),     // ~1.1m wavelength
+                height = 1.4f,                       // was 0.15f
+                perlinBlend = 0.7f,
+                baseScaleMultiplier = 1f,
+                active = true,
+                windResponse = 1.5f,
+                currentResponse = 0.2f,
+                scaleFrequencyBoost = 7f             // was 6f
+            }
+            };
+        }
+    }
+
+
 
     void Update()
     {
@@ -101,8 +166,6 @@ public class Waves : MonoBehaviour
         {
             time = Time.time,
             vertices = vertexData,
-            uvs = uvData,                                   // pass UVs
-            virtualDimensions = Mathf.Max(1, dimensions),   // emulate original grid
             windDirection = windDirNorm,
             windStrength = windStrength,
             currentDirection = curDirNorm,
@@ -458,6 +521,10 @@ public class Waves : MonoBehaviour
         public bool active;
         [Range(0f, 2f)] public float windResponse;
         [Range(0f, 2f)] public float currentResponse;
+
+        // NEW
+        [UnityEngine.Tooltip("How strongly Scale affects frequency for this octave (1 = raw, 4 = punchy).")]
+        public float scaleFrequencyBoost;
     }
 
     private static int HashArray(int[] arr)

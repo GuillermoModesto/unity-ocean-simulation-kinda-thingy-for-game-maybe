@@ -1,4 +1,4 @@
-using Unity.Burst;
+﻿using Unity.Burst;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
@@ -8,9 +8,7 @@ public struct WavesJob : IJobParallelFor
 {
     [ReadOnly] public NativeArray<OctaveData> octaves;
     public NativeArray<float3> vertices;
-    [ReadOnly] public NativeArray<float2> uvs;
 
-    public int virtualDimensions;
     public float time;
 
     public float windStrength;
@@ -20,20 +18,15 @@ public struct WavesJob : IJobParallelFor
 
     public void Execute(int index)
     {
+        const float EPS = 1e-4f;
+        const float TAU = 6.28318530718f; // 2π
+
         float3 v = vertices[index];
-        float3 outV = v;
+        float wx = v.x;   // world-space X (m)
+        float wz = v.z;   // world-space Z (m)
 
         float2 windDir = math.lengthsq(windDirection) > 0f ? math.normalize(windDirection) : float2.zero;
         float2 curDir = math.lengthsq(currentDirection) > 0f ? math.normalize(currentDirection) : float2.zero;
-
-        const float EPS = 1e-4f;
-        int dims = math.max(1, virtualDimensions);
-
-        float2 uv = uvs[index];
-        float xCoord = uv.x;
-        float yCoord = uv.y;
-        float gx = uv.x * dims;
-        float gy = uv.y * dims;
 
         float height = 0f;
         int lastOctaveIndex = octaves.Length - 1;
@@ -43,52 +36,44 @@ public struct WavesJob : IJobParallelFor
             var oc = octaves[i];
             if (!oc.active) continue;
 
+            // base scale (cycles/m), allow early-octave base multiplier
             float baseMul = (i < 2) ? math.max(oc.baseScaleMultiplier, EPS) : 1f;
 
-            float2 s = new float2(
+            float2 sBase = new float2(
                 math.max(math.abs(oc.scale.x) * baseMul, EPS),
                 math.max(math.abs(oc.scale.y) * baseMul, EPS)
             );
 
-            float2 pos = new float2(gx * s.x, gy * s.y);
+            // per-octave frequency boost
+            float boost = math.max(0.01f, oc.scaleFrequencyBoost);
+            float2 k = TAU * sBase * boost; // radians per meter
 
-            // --- SPEED INFLUENCE ---
-            float windSpeedInfluence = 0.05f; // default small effect
-            if (i == lastOctaveIndex) // last octave gets big wind speed boost
-                windSpeedInfluence = 0.25f;
-
-            float currentSpeedInfluence = 0.05f; // minimal effect from current on speed
+            // phase velocity with wind/current flow
+            float windSpeedInfluence = (i == lastOctaveIndex) ? 0.25f : 0.05f;
+            float currentSpeedInfluence = 0.05f;
 
             float2 flowVec = windDir * windStrength * oc.windResponse * windSpeedInfluence
-                           + curDir * currentStrength * oc.currentResponse * currentSpeedInfluence;
+                            + curDir * currentStrength * oc.currentResponse * currentSpeedInfluence;
 
             float2 phaseVel = oc.speed + flowVec;
+            float2 tvec = phaseVel * (0.01f * time); // small factor keeps it stable
 
-            // --- TIME OFFSET ---
-            float2 tvec = phaseVel * (0.01f * time);
+            float2 phase = new float2(wx, wz) * k + tvec;
 
-            // --- SHAPE ---
-            float sine = math.sin(pos.x + tvec.x) + math.cos(pos.y + tvec.y);
+            float sine = math.sin(phase.x) + math.cos(phase.y);
+            float perlin = noise.cnoise(phase);
+            float wave = math.lerp(sine, perlin, math.clamp(oc.perlinBlend, 0f, 1f));
 
-            float2 noiseInput = new float2(xCoord * s.x + tvec.x, yCoord * s.y + tvec.y);
-            float perlin = noise.cnoise(noiseInput);
-
-            float blend = math.clamp(oc.perlinBlend, 0f, 1f);
-            float wave = math.lerp(sine, perlin, blend);
-
-            // --- HEIGHT INFLUENCE ---
             float ampFromEnv = 1f;
-            if (i == 0) // first octave gets big current strength effect on height
+            if (i == 0)
                 ampFromEnv += currentStrength * oc.currentResponse * 1.2f;
             else
                 ampFromEnv += (windStrength * oc.windResponse + currentStrength * oc.currentResponse) * 0.3f;
 
-            float dynH = oc.height * ampFromEnv;
-
-            height += wave * dynH;
+            height += wave * (oc.height * ampFromEnv);
         }
 
-        outV.y = height;
-        vertices[index] = outV;
+        v.y = height;
+        vertices[index] = v;
     }
 }
