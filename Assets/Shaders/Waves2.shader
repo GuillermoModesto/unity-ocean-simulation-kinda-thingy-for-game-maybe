@@ -9,7 +9,7 @@
         _EmeraldColor   ("Emerald", Color)           = (0.02, 0.55, 0.46, 1)
         _AquaColor      ("Aqua", Color)              = (0.18, 0.78, 0.85, 1)
         _ShallowColor   ("Shallow", Color)           = (0.32, 0.90, 0.86, 1)
-        _SandColor      ("Sand / Shore", Color)      = (0.86, 0.88, 0.84, 1) // softened
+        _SandColor      ("Sand / Shore", Color)      = (0.86, 0.88, 0.84, 1)
         _RimColor       ("Rim (Fresnel) Color", Color)= (0.80, 0.97, 1.00, 1)
 
         _SandStrength   ("Sand Strength", Range(0,1)) = 0.35
@@ -59,13 +59,13 @@
         _AlphaBase      ("Base Alpha", Range(0,1)) = 0.55
         _AlphaFresnel   ("Fresnel Alpha Boost", Range(0,1)) = 0.35
 
-        // --- Time / flow (works with WaterShaderDriver) ---
+        // --- Time / flow (kept for compatibility; not used for normals/foam) ---
         _WaveTime       ("Wave Time (seconds)", Float) = 0
         _UseExternalTime("Use External Time (1=yes)", Float) = 0
         _WindDir        ("_WindDir (x,y,w=strength)", Vector) = (1,0,0,1)
         _CurrentDir     ("_CurrentDir (x,y,w=strength)", Vector) = (1,0,0,1)
 
-        // --- Wake / ripples (fed by WakePainter) ---
+        // --- Wake / ripples (optional; fed by WakePainter) ---
         _WakeMap            ("Wake Map (auto)", 2D) = "black" {}
         _WakeFoamStrength   ("Wake Foam Strength", Range(0,2)) = 1.0
         _WakeNormalStrength ("Wake Ripple Normal", Range(0,1)) = 0.25
@@ -119,7 +119,7 @@
                 // alpha
                 float _AlphaBase, _AlphaFresnel;
 
-                // time/flow
+                // time/flow (compat)
                 float _WaveTime, _UseExternalTime;
                 float4 _WindDir, _CurrentDir;
 
@@ -195,13 +195,12 @@
                 // --- Base tropical color ---
                 float3 col = TropicalRamp(h01, saturate(_RampSoftness));
 
-                // --- Time & flow ---
+                // --- Time (decoupled from wind/current) ---
                 float t = (_UseExternalTime > 0.5) ? _WaveTime : _Time.y;
-                float2 flow = _WindDir.xy*_WindDir.w + _CurrentDir.xy*_CurrentDir.w;
 
-                // --- Two scrolling normal layers ---
-                float2 uvA = IN.worldPos.xz * _NormalATiling.xy + (_NormalASpeed.xy + flow*0.03) * t;
-                float2 uvB = IN.worldPos.xz * _NormalBTiling.xy + (_NormalBSpeed.xy - flow*0.02) * t;
+                // --- Two scrolling normal layers (NO wind/current influence) ---
+                float2 uvA = IN.worldPos.xz * _NormalATiling.xy + _NormalASpeed.xy * t;
+                float2 uvB = IN.worldPos.xz * _NormalBTiling.xy + _NormalBSpeed.xy * t;
 
                 float3 nA = UnpackRG(SAMPLE_TEXTURE2D(_NormalA, sampler_NormalA, uvA), _NormalAStr);
                 float3 nB = UnpackRG(SAMPLE_TEXTURE2D(_NormalB, sampler_NormalB, uvB), _NormalBStr);
@@ -238,8 +237,7 @@
                 float wU = SAMPLE_TEXTURE2D(_WakeMap, sampler_WakeMap, wakeUV + float2(0, texel.y)).r;
 
                 float2 grad = float2(wR - wL, wU - wD);
-                float3 wakeN = normalize(float3(-grad * 8.0, 1.0)); // 8=arbitrary bump factor
-                // blend wake bump into N
+                float3 wakeN = normalize(float3(-grad * 8.0, 1.0));
                 N = normalize(lerp(N, normalize(RNM(N, wakeN)), _WakeNormalStrength));
 
                 // --- Fresnel + simple spec ---
@@ -254,11 +252,13 @@
                 col = col + _SpecularColor.rgb * spec * _SpecularStrength;
                 col = lerp(col, _RimColor.rgb, saturate(fres));
 
-                // --- Crest foam (slope + tiny curvature + noise; biased to peaks) ---
+                // --- Crest foam (decoupled from wind/current; uses own speed/tiling) ---
                 float curv = (length(ddx(N)) + length(ddy(N)));  curv = saturate(curv * 0.75);
                 float peak = smoothstep(1.0 - _FoamHeightBias, 1.0, h01);
-                float2 fuv = IN.worldPos.xz * _FoamTiling.xy + (_FoamSpeed.xy + flow*0.04) * t;
+
+                float2 fuv = IN.worldPos.xz * _FoamTiling.xy + _FoamSpeed.xy * t; // <— no flow
                 float noise = SAMPLE_TEXTURE2D(_FoamTex, sampler_FoamTex, fuv).r;
+
                 float crestSlope = pow(1.0 - saturate(dot(N, up)), _FoamSharp);
                 float foamMask = (crestSlope + curv * _FoamCurvAmt) * (0.6 + 0.4*noise) * peak * _FoamAmount;
 

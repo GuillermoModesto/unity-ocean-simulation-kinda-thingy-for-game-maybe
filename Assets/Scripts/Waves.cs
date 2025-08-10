@@ -118,7 +118,7 @@ public class Waves : MonoBehaviour
                 perlinBlend = 1f,
                 baseScaleMultiplier = 1f,
                 active = true,
-                windResponse = 1.4f,
+                windResponse = 0.8f,
                 currentResponse = 0.3f,
                 scaleFrequencyBoost = 0f             // was 4.5f
             },
@@ -130,19 +130,41 @@ public class Waves : MonoBehaviour
                 perlinBlend = 0.7f,
                 baseScaleMultiplier = 1f,
                 active = true,
-                windResponse = 1.5f,
+                windResponse = 0.2f,
                 currentResponse = 0.2f,
                 scaleFrequencyBoost = 0f             // was 6f
             },
             // 5. Periodic longer waves
             new Octave {
-                speed = new Vector2(20f, 10f),
+                speed = new Vector2(8f, 20f),
                 scale = new Vector2(0.4f, 0.65f),     // ~1.1m wavelength
                 height = 2f,                       // was 0.15f
                 perlinBlend = 0.8f,
                 baseScaleMultiplier = 1f,
                 active = true,
-                windResponse = 1.5f,
+                windResponse = 1f,
+                currentResponse = 0.2f,
+                scaleFrequencyBoost = 0f             // was 6f
+            },// 6. Periodic longer bigger waves
+            new Octave {
+                speed = new Vector2(6f, 14f),
+                scale = new Vector2(0.2f, 0.4f),     // ~1.1m wavelength
+                height = 5f,                       // was 0.15f
+                perlinBlend = 0.8f,
+                baseScaleMultiplier = 1f,
+                active = true,
+                windResponse = 1.3f,
+                currentResponse = 0.2f,
+                scaleFrequencyBoost = 0f             // was 6f
+            },// 7. Periodic longer BIIIIIIG waves
+            new Octave {
+                speed = new Vector2(1f, 3f),
+                scale = new Vector2(0.08f, 0.04f),     // ~1.1m wavelength
+                height = 9f,                       // was 0.15f
+                perlinBlend = 0.7f,
+                baseScaleMultiplier = 1f,
+                active = true,
+                windResponse = 1.6f,
                 currentResponse = 0.2f,
                 scaleFrequencyBoost = 0f             // was 6f
             }
@@ -448,6 +470,32 @@ public class Waves : MonoBehaviour
         Vector3 n = new Vector3(-slopeX, 1f, -slopeZ);
         return n.normalized;
     }
+
+    // Approximate vertical amplitude from all active octaves, matching WavesJob logic.
+    public float EstimateSurfaceAmplitude()
+    {
+        if (octaves == null || octaves.Length == 0) return 1f;
+
+        float total = 0f;
+        for (int i = 0; i < octaves.Length; i++)
+        {
+            var oc = octaves[i];
+            if (!oc.active) continue;
+
+            // Matches the env response used in WavesJob (height section)
+            float ampFromEnv = 1f;
+            if (i == 0)
+                ampFromEnv += currentStrength * oc.currentResponse * 1.2f;   // first octave boosted by current
+            else
+                ampFromEnv += (windStrength * oc.windResponse + currentStrength * oc.currentResponse) * 0.3f;
+
+            total += Mathf.Abs(oc.height * ampFromEnv);
+        }
+
+        // total ≈ "±" amplitude around sea level (peak ~ sum|dynH|)
+        return Mathf.Max(0.1f, total);
+    }
+
 
     // ---------- Native arrays & copying ----------
 
