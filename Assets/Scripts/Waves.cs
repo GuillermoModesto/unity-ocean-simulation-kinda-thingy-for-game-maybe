@@ -96,31 +96,31 @@ public class Waves : MonoBehaviour
                 active = true,
                 windResponse = 0.3f,
                 currentResponse = 0.6f,
-                scaleFrequencyBoost = 2.5f           // was 2f
+                scaleFrequencyBoost = 0f           // was 2f
             },
             // 2. Main waves
             new Octave {
-                speed = new Vector2(2f, 0.38f),
+                speed = new Vector2(6.08f, 2.38f),
                 scale = new Vector2(0.2f, 0.4f),   // ~7m wavelength
-                height = 1.8f,                       // was 0.8f
+                height = 2.1f,                       // was 0.8f
                 perlinBlend = 0.82f,
                 baseScaleMultiplier = 1f,
                 active = true,
-                windResponse = 0.6f,
+                windResponse = 1.6f,
                 currentResponse = 0.4f,
-                scaleFrequencyBoost = 3.5f           // was 3f
+                scaleFrequencyBoost = 0f           // was 3f
             },
             // 3. Extra realism ripples
             new Octave {
-                speed = new Vector2(0.85f, 0.9f),
+                speed = new Vector2(3.93f, 2.91f),
                 scale = new Vector2(0.4f, 0.4f),     // ~2.5m wavelength
                 height = 2f,                       // was 0.35f
                 perlinBlend = 1f,
                 baseScaleMultiplier = 1f,
                 active = true,
-                windResponse = 1f,
+                windResponse = 1.4f,
                 currentResponse = 0.3f,
-                scaleFrequencyBoost = 5f             // was 4.5f
+                scaleFrequencyBoost = 0f             // was 4.5f
             },
             // 4. Choppy detail
             new Octave {
@@ -132,7 +132,7 @@ public class Waves : MonoBehaviour
                 active = true,
                 windResponse = 1.5f,
                 currentResponse = 0.2f,
-                scaleFrequencyBoost = 7f             // was 6f
+                scaleFrequencyBoost = 0f             // was 6f
             }
             };
         }
@@ -485,7 +485,8 @@ public class Waves : MonoBehaviour
                 baseScaleMultiplier = o.baseScaleMultiplier,
                 active = o.active,
                 windResponse = o.windResponse,
-                currentResponse = o.currentResponse
+                currentResponse = o.currentResponse,
+                scaleFrequencyBoost = o.scaleFrequencyBoost
             };
         }
     }
