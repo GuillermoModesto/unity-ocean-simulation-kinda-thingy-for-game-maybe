@@ -150,6 +150,11 @@ Transform:
   m_Children: []
   m_Father: {fileID: 1408964114}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!4 &60028102 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 7854736020535481108, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
+  m_PrefabInstance: {fileID: 2486884410001644850}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &81369519
 GameObject:
   m_ObjectHideFlags: 0
@@ -395,7 +400,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2544179778998594948, guid: d43bb1b3d0f6dbe4588904e161bc11e7, type: 3}
       propertyPath: lodCubeSize
-      value: 500
+      value: 700
       objectReference: {fileID: 0}
     - target: {fileID: 2544179778998594948, guid: d43bb1b3d0f6dbe4588904e161bc11e7, type: 3}
       propertyPath: targetCamera
@@ -412,6 +417,18 @@ PrefabInstance:
     - target: {fileID: 2544179778998594948, guid: d43bb1b3d0f6dbe4588904e161bc11e7, type: 3}
       propertyPath: currentStrength
       value: 0.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 2544179778998594948, guid: d43bb1b3d0f6dbe4588904e161bc11e7, type: 3}
+      propertyPath: windDirection.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2544179778998594948, guid: d43bb1b3d0f6dbe4588904e161bc11e7, type: 3}
+      propertyPath: windDirection.y
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 2544179778998594948, guid: d43bb1b3d0f6dbe4588904e161bc11e7, type: 3}
+      propertyPath: currentDirection.x
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 2544179778998594948, guid: d43bb1b3d0f6dbe4588904e161bc11e7, type: 3}
       propertyPath: octaves.Array.size
@@ -568,6 +585,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 7912224668665174050, guid: d43bb1b3d0f6dbe4588904e161bc11e7, type: 3}
       insertIndex: -1
       addedObject: {fileID: 1530363806}
+    - targetCorrespondingSourceObject: {fileID: 7912224668665174050, guid: d43bb1b3d0f6dbe4588904e161bc11e7, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1530363810}
   m_SourcePrefab: {fileID: 100100000, guid: d43bb1b3d0f6dbe4588904e161bc11e7, type: 3}
 --- !u!43 &911783072
 Mesh:
@@ -1116,6 +1136,36 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   waves: {fileID: 1530363804}
+  useExternalTime: 1
+  autoColorRange: 1
+  colorRangeMultiplier: 1.1
+  colorRangeSmoothing: 0.5
+  wakeSource: {fileID: 0}
+  explicitWakeMap: {fileID: 0}
+--- !u!114 &1530363810
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1530363801}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ad226a4b65565ed40b75fdf3bff4d9df, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  seaState: 0.283
+  windAngleDeg: 0
+  currentAngleDeg: 0
+  maxWindStrength: 8
+  maxCurrentStrength: 3
+  affectAmplitude: 0
+  affectChoppiness: 1
+  affectWavelength: 1
+  affectMoveSpeed: 1
+  maxSpeedMul: 1.38
+  liveUpdate: 1
+  waves: {fileID: 1530363804}
 --- !u!1001 &2486884410001644850
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -1124,6 +1174,26 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: -8092070495815832743, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
+      propertyPath: waves
+      value: 
+      objectReference: {fileID: 1530363804}
+    - target: {fileID: -8092070495815832743, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
+      propertyPath: textureSize
+      value: 1024
+      objectReference: {fileID: 0}
+    - target: {fileID: -8092070495815832743, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
+      propertyPath: debugPreview
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8092070495815832743, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
+      propertyPath: followTarget
+      value: 
+      objectReference: {fileID: 60028102}
+    - target: {fileID: -8092070495815832743, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
+      propertyPath: speedIntensity
+      value: 0.04
+      objectReference: {fileID: 0}
     - target: {fileID: 1320253696054395029, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
       propertyPath: m_Name
       value: Boat

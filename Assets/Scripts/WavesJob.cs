@@ -22,8 +22,8 @@ public struct WavesJob : IJobParallelFor
         const float TAU = 6.28318530718f; // 2π
 
         float3 v = vertices[index];
-        float wx = v.x;   // world-space X (m)
-        float wz = v.z;   // world-space Z (m)
+        float wx = v.x;
+        float wz = v.z;
 
         float2 windDir = math.lengthsq(windDirection) > 0f ? math.normalize(windDirection) : float2.zero;
         float2 curDir = math.lengthsq(currentDirection) > 0f ? math.normalize(currentDirection) : float2.zero;
@@ -48,15 +48,19 @@ public struct WavesJob : IJobParallelFor
             float boost = math.max(0.01f, oc.scaleFrequencyBoost);
             float2 k = TAU * sBase * boost; // radians per meter
 
-            // phase velocity with wind/current flow
+            // environmental flow (same logic as before)
             float windSpeedInfluence = (i == lastOctaveIndex) ? 0.25f : 0.05f;
             float currentSpeedInfluence = 0.05f;
 
             float2 flowVec = windDir * windStrength * oc.windResponse * windSpeedInfluence
-                            + curDir * currentStrength * oc.currentResponse * currentSpeedInfluence;
+                           + curDir * currentStrength * oc.currentResponse * currentSpeedInfluence;
 
-            float2 phaseVel = oc.speed + flowVec;
-            float2 tvec = phaseVel * (0.01f * time); // small factor keeps it stable
+            // NEW: separate direction + scalar speed
+            float2 ownVelDir = math.lengthsq(oc.direction) > 0f ? math.normalize(oc.direction) : new float2(1f, 0f);
+            float2 ownVel = ownVelDir * math.max(0f, oc.moveSpeed);
+
+            float2 phaseVel = ownVel + flowVec;
+            float2 tvec = phaseVel * (0.01f * time);
 
             float2 phase = new float2(wx, wz) * k + tvec;
 

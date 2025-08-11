@@ -16,6 +16,11 @@ public class WakePainter : MonoBehaviour
     public float decayPerSecond = 0.9f;
     public float blurRadius = 1.2f;
 
+    [Header("Contact")]
+    public Waves waves;              // assign your Waves in the inspector (or find at runtime)
+    public float contactDepthRange = 0.5f; // meters of submergence for full intensity
+    public float minContactDepth = 0.02f; // small tolerance
+
     [Header("Splat")]
     public float radiusMeters = 2.5f;
     public float baseIntensity = 0.6f;
@@ -138,6 +143,16 @@ public class WakePainter : MonoBehaviour
         matDecay.SetFloat(ID_Blur, blurRadius);
         Graphics.Blit(rtA, rtB, matDecay, 0);
 
+        // Optional contact gating
+        float contact = 1f;
+        if (waves != null)
+        {
+            float waterY = waves.GetHeightAt(new Vector3(wp.x, 0f, wp.z));
+            float depth = waterY - wp.y; // >0 means under the surface
+            if (depth <= minContactDepth) contact = 0f;
+            else contact = Mathf.Clamp01(depth / Mathf.Max(1e-3f, contactDepthRange));
+        }
+
         // 2) Add splat: rtB + splat -> rtA
         float radiusUV = Mathf.Max(1e-4f, radiusMeters * uvScale);
         float intensity = Mathf.Clamp01(baseIntensity + speedIntensity * speed);
@@ -156,5 +171,19 @@ public class WakePainter : MonoBehaviour
         }
     }
 
+#if UNITY_EDITOR
+    [Header("Debug Preview")]
+    public bool debugPreview = true;
+    public int debugSize = 256;
+
+    void OnGUI()
+    {
+        if (!debugPreview) return;
+        var rt = GetWakeRT();
+        if (rt == null) return;
+        // top-left overlay
+        GUI.DrawTexture(new Rect(10, 10, debugSize, debugSize), rt, ScaleMode.StretchToFill, false);
+    }
+#endif
     public RenderTexture GetWakeRT() => rtA;
 }

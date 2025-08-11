@@ -23,6 +23,10 @@ Material:
   m_SavedProperties:
     serializedVersion: 3
     m_TexEnvs:
+    - _BaseNormalMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     - _FoamTex:
         m_Texture: {fileID: 2800000, guid: 1123872b16e3bf644a0c957912b9809f, type: 3}
         m_Scale: {x: 1, y: 1}
@@ -36,13 +40,15 @@ Material:
         m_Scale: {x: 0.1, y: 0.1}
         m_Offset: {x: 0, y: 0}
     - _WakeMap:
-        m_Texture: {fileID: 0}
+        m_Texture: {fileID: 2800000, guid: 092e211ceacfa434e98be565c4fbe886, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
     - _AlphaBase: 1
     - _AlphaFresnel: 1
+    - _BaseNormalStrength: 0.6
+    - _BaseNormalTiling: 0.06
     - _FoamAmount: 2
     - _FoamCurvAmt: 0.71
     - _FoamHeightBias: 0.625
@@ -50,6 +56,7 @@ Material:
     - _FresnelBoost: 0.73
     - _FresnelPower: 7.07
     - _HeightRange: 6.91
+    - _Metallic: 0
     - _NormalAStr: 0.72
     - _NormalBStr: 0.85
     - _NormalFadeEnd: 825.8
@@ -57,6 +64,7 @@ Material:
     - _NormalSlopeAtten: 0.868
     - _NormalStrength: 0.541
     - _NormalViewAtten: 0.435
+    - _Opacity: 0.9
     - _RampShift: -0.121
     - _RampSoftness: 0.405
     - _SandBrightness: 0.773

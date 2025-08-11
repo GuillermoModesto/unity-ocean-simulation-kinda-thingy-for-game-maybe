@@ -3,6 +3,7 @@ using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
 using System;
+using UnityEngine.Serialization; // for FormerlySerializedAs
 
 [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
 public class Waves : MonoBehaviour
@@ -29,8 +30,8 @@ public class Waves : MonoBehaviour
     public int lodHighRes = 100;
 
     [Header("Multi-LOD Rings (outside the inner cube)")]
-    [SerializeField] private float[] lodRingWidths = new float[] { 40f, 60f, 90f, 140f, 220f }; // outermost is bigger
-    [SerializeField] private int[] lodRingRes = new int[] { 64, 48, 32, 24, 16 }; // decreasing outwards
+    [SerializeField] private float[] lodRingWidths = new float[] { 40f, 60f, 90f, 140f, 220f };
+    [SerializeField] private int[] lodRingRes = new int[] { 64, 48, 32, 24, 16 };
     [SerializeField, Range(1, 6)] private int ringThicknessCells = 1;
     [SerializeField] private float targetCellSize = 8f;
 
@@ -43,7 +44,7 @@ public class Waves : MonoBehaviour
     private MeshFilter meshFilter;
 
     private NativeArray<float3> vertexData;
-    private NativeArray<float2> uvData;          // pass UVs to job
+    private NativeArray<float2> uvData;
     private NativeArray<OctaveData> octaveData;
 
     private Vector3[] vertices;
@@ -84,95 +85,187 @@ public class Waves : MonoBehaviour
     {
         if (octaves == null || octaves.Length == 0)
         {
+            // These defaults mirror your previous ones but split the old 'speed' into direction + moveSpeed.
             octaves = new Octave[]
             {
-            // 1. Swell - large, slow waves
-            new Octave {
-                speed = new Vector2(0.25f, 0.18f),
-                scale = new Vector2(0.05f, 0.05f),   // ~20m wavelength
-                height = 2.5f,                       // was 1.2f
-                perlinBlend = 0.1f,
-                baseScaleMultiplier = 1f,
-                active = true,
-                windResponse = 0.3f,
-                currentResponse = 0.6f,
-                scaleFrequencyBoost = 0f           // was 2f
-            },
-            // 2. Main waves
-            new Octave {
-                speed = new Vector2(6.08f, 2.38f),
-                scale = new Vector2(0.2f, 0.4f),   // ~7m wavelength
-                height = 1.6f,                       // was 0.8f
-                perlinBlend = 0.82f,
-                baseScaleMultiplier = 1f,
-                active = true,
-                windResponse = 1.6f,
-                currentResponse = 0.4f,
-                scaleFrequencyBoost = 0f           // was 3f
-            },
-            // 3. Extra realism ripples
-            new Octave {
-                speed = new Vector2(3.93f, 2.91f),
-                scale = new Vector2(0.4f, 0.4f),     // ~2.5m wavelength
-                height = 1.1f,                       // was 0.35f
-                perlinBlend = 1f,
-                baseScaleMultiplier = 1f,
-                active = true,
-                windResponse = 0.8f,
-                currentResponse = 0.3f,
-                scaleFrequencyBoost = 0f             // was 4.5f
-            },
-            // 4. Choppy detail
-            new Octave {
-                speed = new Vector2(28f, 12f),
-                scale = new Vector2(0.9f, 0.9f),     // ~1.1m wavelength
-                height = 0.8f,                       // was 0.15f
-                perlinBlend = 0.7f,
-                baseScaleMultiplier = 1f,
-                active = true,
-                windResponse = 0.2f,
-                currentResponse = 0.2f,
-                scaleFrequencyBoost = 0f             // was 6f
-            },
-            // 5. Periodic longer waves
-            new Octave {
-                speed = new Vector2(8f, 20f),
-                scale = new Vector2(0.4f, 0.65f),     // ~1.1m wavelength
-                height = 2f,                       // was 0.15f
-                perlinBlend = 0.8f,
-                baseScaleMultiplier = 1f,
-                active = true,
-                windResponse = 1f,
-                currentResponse = 0.2f,
-                scaleFrequencyBoost = 0f             // was 6f
-            },// 6. Periodic longer bigger waves
-            new Octave {
-                speed = new Vector2(6f, 14f),
-                scale = new Vector2(0.2f, 0.4f),     // ~1.1m wavelength
-                height = 5f,                       // was 0.15f
-                perlinBlend = 0.8f,
-                baseScaleMultiplier = 1f,
-                active = true,
-                windResponse = 1.3f,
-                currentResponse = 0.2f,
-                scaleFrequencyBoost = 0.0104f             // was 6f
-            },// 7. Periodic longer BIIIIIIG waves
-            new Octave {
-                speed = new Vector2(1f, 3f),
-                scale = new Vector2(0.08f, 0.1f),     // ~1.1m wavelength
-                height = 9f,                       // was 0.15f
-                perlinBlend = 0.7f,
-                baseScaleMultiplier = 1f,
-                active = true,
-                windResponse = 1.6f,
-                currentResponse = 0.2f,
-                scaleFrequencyBoost = 0.012f             // was 6f
-            }
+                new Octave {
+                    direction = new Vector2(0.2f, 0.8f), moveSpeed = new Vector2(0.6f, 2.2f).magnitude,
+                    scale = new Vector2(0.016f, 0.05f),
+                    height = 9f, perlinBlend = 0.7f, baseScaleMultiplier = 1f, active = true,
+                    windResponse = 1.6f, currentResponse = 0.2f, scaleFrequencyBoost = 0.012f
+                },
+                new Octave {
+                    direction = new Vector2(0.3f, 0.9f), moveSpeed = new Vector2(6f, 14f).magnitude,
+                    scale = new Vector2(0.09f, 0.2f),
+                    height = 5f, perlinBlend = 0.8f, baseScaleMultiplier = 1f, active = true,
+                    windResponse = 1.3f, currentResponse = 0.2f, scaleFrequencyBoost = 0.0104f
+                },
+                new Octave {
+                    direction = new Vector2(0.3f, 0.8f), moveSpeed = new Vector2(8f, 20f).magnitude,
+                    scale = new Vector2(0.2f, 0.3f),
+                    height = 2f, perlinBlend = 0.8f, baseScaleMultiplier = 1f, active = true,
+                    windResponse = 1f, currentResponse = 0.2f, scaleFrequencyBoost = 0f
+                },
+                new Octave {
+                    direction = new Vector2(0.1f, 0.9f), moveSpeed = new Vector2(28f, 12f).magnitude,
+                    scale = new Vector2(0.4f, 0.7f),
+                    height = 0.8f, perlinBlend = 0.7f, baseScaleMultiplier = 1f, active = true,
+                    windResponse = 0.2f, currentResponse = 0.2f, scaleFrequencyBoost = 0f
+                },
+                new Octave {
+                    direction = new Vector2(0.2f, 1f), moveSpeed = new Vector2(3.93f, 2.91f).magnitude,
+                    scale = new Vector2(0.2f, 0.5f),
+                    height = 1.1f, perlinBlend = 1f, baseScaleMultiplier = 1f, active = true,
+                    windResponse = 0.8f, currentResponse = 0.3f, scaleFrequencyBoost = 0f
+                },
+                new Octave {
+                    direction = new Vector2(0.1f, 1f), moveSpeed = new Vector2(34.8f, 30.2f).magnitude,
+                    scale = new Vector2(1f, 1.8f),
+                    height = 0.35f, perlinBlend = 1f, baseScaleMultiplier = 1f, active = true,
+                    windResponse = 1.2f, currentResponse = 0.25f, scaleFrequencyBoost = 0f
+                }
             };
         }
     }
 
+    public float GetHeightAt(Vector3 worldPos)
+    {
+        if (vertices == null || vertices.Length == 0) return transform.position.y;
+        float minDistSq = float.MaxValue;
+        float h = transform.position.y;
+        for (int i = 0; i < vertices.Length; i++)
+        {
+            Vector3 p = vertices[i];
+            float dx = p.x - worldPos.x;
+            float dz = p.z - worldPos.z;
+            float d2 = dx * dx + dz * dz;
+            if (d2 < minDistSq) { minDistSq = d2; h = p.y; }
+        }
+        return h + transform.position.y;
+    }
 
+    // Approximate vertical amplitude from all active octaves, matching WavesJob logic.
+    public float EstimateSurfaceAmplitude()
+    {
+        if (octaves == null || octaves.Length == 0) return 1f;
+
+        float total = 0f;
+        for (int i = 0; i < octaves.Length; i++)
+        {
+            var oc = octaves[i];
+            if (!oc.active) continue;
+
+            float ampFromEnv = 1f;
+            if (i == 0)
+                ampFromEnv += currentStrength * oc.currentResponse * 1.2f;
+            else
+                ampFromEnv += (windStrength * oc.windResponse + currentStrength * oc.currentResponse) * 0.3f;
+
+            total += Mathf.Abs(oc.height * ampFromEnv);
+        }
+        return Mathf.Max(0.1f, total);
+    }
+
+    // ---------- Native arrays & copying ----------
+
+    private void EnsureVertexArray()
+    {
+        if (vertexData.IsCreated) vertexData.Dispose();
+        vertexData = new NativeArray<float3>(vertices.Length, Allocator.Persistent);
+        lastVertexCount = vertices.Length;
+    }
+
+    private void EnsureUVArray()
+    {
+        if (uvData.IsCreated) uvData.Dispose();
+        uvData = new NativeArray<float2>(uvs.Length, Allocator.Persistent);
+    }
+
+    private void EnsureOctaveArray()
+    {
+        if (octaveData.IsCreated) octaveData.Dispose();
+        octaveData = new NativeArray<OctaveData>(octaves.Length, Allocator.Persistent);
+        lastOctaveCount = octaves.Length;
+    }
+
+    private void CopyMeshVerticesToNative()
+    {
+        for (int i = 0; i < vertices.Length; i++)
+            vertexData[i] = vertices[i];
+    }
+
+    private void CopyMeshUVsToNative()
+    {
+        for (int i = 0; i < uvs.Length; i++)
+            uvData[i] = new float2(uvs[i].x, uvs[i].y);
+    }
+
+    private void CopyOctavesToNative()
+    {
+        for (int i = 0; i < octaves.Length; i++)
+        {
+            var o = octaves[i];
+            // Ensure a valid, normalized direction
+            Vector2 dir = o.direction.sqrMagnitude > 0f ? o.direction.normalized :
+                          (windDirection.sqrMagnitude > 0f ? windDirection.normalized : Vector2.right);
+
+            octaveData[i] = new OctaveData
+            {
+                direction = new Unity.Mathematics.float2(dir.x, dir.y),
+                moveSpeed = Mathf.Max(0f, o.moveSpeed),
+
+                scale = o.scale,
+                height = o.height,
+                perlinBlend = o.perlinBlend,
+                baseScaleMultiplier = o.baseScaleMultiplier,
+                active = o.active,
+                windResponse = o.windResponse,
+                currentResponse = o.currentResponse,
+                scaleFrequencyBoost = o.scaleFrequencyBoost
+            };
+        }
+    }
+
+    private void DisposeArrays()
+    {
+        if (vertexData.IsCreated) vertexData.Dispose();
+        if (uvData.IsCreated) uvData.Dispose();
+        if (octaveData.IsCreated) octaveData.Dispose();
+    }
+
+    // ---------- Gizmos ----------
+
+    private void OnDrawGizmos()
+    {
+        if (Camera.main == null) return;
+        Vector3 center = GetCubeCenter();
+        Vector3 size = new Vector3(lodCubeSize, lodCubeSize, lodCubeSize);
+        Gizmos.color = Color.cyan; Gizmos.DrawWireCube(center, size);
+        Gizmos.color = Color.blue; Gizmos.DrawSphere(center, 2f);
+    }
+
+    // ---------- Types & utils ----------
+
+    [Serializable]
+    public struct Octave
+    {
+        [FormerlySerializedAs("speed")]
+        [Tooltip("Normalized travel direction of this octave (fallback to wind if zero).")]
+        public Vector2 direction;   // NEW: replaces 'speed' (migrated via attribute + OnValidate)
+        [Tooltip("Scalar speed along 'direction' (units/sec).")]
+        public float moveSpeed;     // NEW
+
+        public Vector2 scale;
+        public float height;
+        [Range(0f, 1f)] public float perlinBlend;
+        public float baseScaleMultiplier;
+        public bool active;
+        [Range(0f, 2f)] public float windResponse;
+        [Range(0f, 2f)] public float currentResponse;
+
+        [UnityEngine.Tooltip("How strongly Scale affects frequency for this octave (1 = raw, 4 = punchy).")]
+        public float scaleFrequencyBoost;
+    }
 
     void Update()
     {
@@ -191,18 +284,17 @@ public class Waves : MonoBehaviour
             EnsureOctaveArray();
         CopyOctavesToNative();
 
-        // Normalize safely
+        // Normalize env dirs once (job expects normalized)
         var windDirNorm = windDirection.sqrMagnitude > 0f ? windDirection.normalized : Vector2.zero;
         var curDirNorm = currentDirection.sqrMagnitude > 0f ? currentDirection.normalized : Vector2.zero;
 
-        // Schedule job
         var job = new WavesJob
         {
             time = Time.time,
             vertices = vertexData,
-            windDirection = windDirNorm,
+            windDirection = new float2(windDirNorm.x, windDirNorm.y),
             windStrength = windStrength,
-            currentDirection = curDirNorm,
+            currentDirection = new float2(curDirNorm.x, curDirNorm.y),
             currentStrength = currentStrength,
             octaves = octaveData
         };
@@ -216,18 +308,14 @@ public class Waves : MonoBehaviour
 
         mesh.SetVertices(updated);
         mesh.RecalculateNormals();
-        // Keep a CPU copy in sync for height sampling
         vertices = updated;
-        // mesh.RecalculateBounds(); // enable if waves can push verts far horizontally
     }
-
-    // ---------- Mesh build & LOD ----------
 
     private bool ShouldRebuild()
     {
-        Vector3 center = GetCubeCenter();
-        float dist = Vector3.Distance(center, lastCubeCenter);
-        bool movedEnough = dist >= rebuildDistanceThreshold;
+        Vector3 centerSnapped = GetCubeCenter();
+        float dist = Vector3.Distance(centerSnapped, lastCubeCenter);
+        bool movedEnough = dist >= Mathf.Max(0.5f * GetInnerCellSize(), rebuildDistanceThreshold);
 
         bool lodChanged = rebuildOnLODParamChange &&
                           (lodHighRes != lastHighRes ||
@@ -266,12 +354,6 @@ public class Waves : MonoBehaviour
         lastRingWidthHash = HashArray(lodRingWidths);
         lastRingResHash = HashArray(lodRingRes);
         lastVertexCount = vertices.Length;
-    }
-
-    private Vector3 GetCubeCenter()
-    {
-        Vector3 camPos = Camera.main != null ? Camera.main.transform.position : Vector3.zero;
-        return new Vector3(camPos.x, transform.position.y, camPos.z);
     }
 
     // High-res inner square + N outer rectangular rings (4 strips each)
@@ -321,8 +403,10 @@ public class Waves : MonoBehaviour
             }
         }
 
-        // 2) Outer rings
-        float prevMinX = minHX, prevMaxX = maxHX, prevMinZ = minHZ, prevMaxZ = maxHZ;
+        // 2) Build expanding rings outward
+        float prevMinX = minHX, prevMaxX = maxHX;
+        float prevMinZ = minHZ, prevMaxZ = maxHZ;
+
         int ringCount = Mathf.Min(lodRingWidths.Length, lodRingRes.Length);
 
         for (int r = 0; r < ringCount; r++)
@@ -339,10 +423,17 @@ public class Waves : MonoBehaviour
                 ? ringThicknessCells
                 : Mathf.Max(1, Mathf.RoundToInt(w / Mathf.Max(1f, targetCellSize)));
 
-            AddStripX(newMinX, newMaxX, prevMaxZ, newMaxZ, R, rowsAcross, ref verts, ref uvsL, ref tris, areaSize);
-            AddStripX(newMinX, newMaxX, newMinZ, prevMinZ, R, rowsAcross, ref verts, ref uvsL, ref tris, areaSize);
-            AddStripZ(newMinX, prevMinX, prevMinZ, prevMaxZ, R, rowsAcross, ref verts, ref uvsL, ref tris, areaSize);
-            AddStripZ(prevMaxX, newMaxX, prevMinZ, prevMaxZ, R, rowsAcross, ref verts, ref uvsL, ref tris, areaSize);
+            // Top & bottom strips (extend along X)
+            AddStripX(newMinX, newMaxX, prevMaxZ, newMaxZ, R, rowsAcross,
+                      ref verts, ref uvsL, ref tris, areaSize);
+            AddStripX(newMinX, newMaxX, newMinZ, prevMinZ, R, rowsAcross,
+                      ref verts, ref uvsL, ref tris, areaSize);
+
+            // Left & right strips (extend along Z)
+            AddStripZ(newMinX, prevMinX, prevMinZ, prevMaxZ, R, rowsAcross,
+                      ref verts, ref uvsL, ref tris, areaSize);
+            AddStripZ(prevMaxX, newMaxX, prevMinZ, prevMaxZ, R, rowsAcross,
+                      ref verts, ref uvsL, ref tris, areaSize);
 
             prevMinX = newMinX; prevMaxX = newMaxX;
             prevMinZ = newMinZ; prevMaxZ = newMaxZ;
@@ -353,7 +444,7 @@ public class Waves : MonoBehaviour
         uvs = uvsL.ToArray();
     }
 
-    private static void AddStripX(
+    void AddStripX(
         float x0, float x1, float z0, float z1,
         int colsAlong, int rowsAcross,
         ref System.Collections.Generic.List<Vector3> verts,
@@ -389,7 +480,7 @@ public class Waves : MonoBehaviour
             }
     }
 
-    private static void AddStripZ(
+    void AddStripZ(
         float x0, float x1, float z0, float z1,
         int colsAlong, int rowsAcross,
         ref System.Collections.Generic.List<Vector3> verts,
@@ -425,185 +516,80 @@ public class Waves : MonoBehaviour
             }
     }
 
-    // ---------- Height & normal sampling ----------
-
-    /// <summary>Returns water height at a given world position (nearest-vertex, local-space safe).</summary>
-    public float GetHeightAt(Vector3 worldPos)
-    {
-        if (vertices == null || vertices.Length == 0)
-            return transform.position.y;
-
-        // Convert query point to mesh local space
-        Vector3 local = transform.InverseTransformPoint(worldPos);
-
-        // Find nearest vertex in local XZ
-        int closest = 0;
-        float bestD2 = float.PositiveInfinity;
-        for (int i = 0; i < vertices.Length; i++)
-        {
-            Vector3 v = vertices[i];
-            float dx = v.x - local.x;
-            float dz = v.z - local.z;
-            float d2 = dx * dx + dz * dz;
-            if (d2 < bestD2) { bestD2 = d2; closest = i; }
-        }
-
-        // Convert that local Y back to world Y
-        float yLocal = vertices[closest].y;
-        return transform.TransformPoint(new Vector3(0f, yLocal, 0f)).y;
-    }
-
     /// <summary>Approximates the surface normal at worldPos by 4-sample gradient.</summary>
-    public Vector3 GetNormalAt(Vector3 worldPos, float sampleRadius = 0.5f)
+public Vector3 GetNormalAt(Vector3 worldPos, float sampleRadius = 0.5f)
+{
+    float dx = Mathf.Max(0.05f, sampleRadius);
+    float dz = Mathf.Max(0.05f, sampleRadius);
+
+    float hL = GetHeightAt(worldPos + new Vector3(-dx, 0f, 0f));
+    float hR = GetHeightAt(worldPos + new Vector3(dx, 0f, 0f));
+    float hD = GetHeightAt(worldPos + new Vector3(0f, 0f, -dz));
+    float hU = GetHeightAt(worldPos + new Vector3(0f, 0f,  dz));
+
+    float slopeX = (hR - hL) / (2f * dx);
+    float slopeZ = (hU - hD) / (2f * dz);
+
+    Vector3 n = new Vector3(-slopeX, 1f, -slopeZ);
+    return n.normalized;
+}
+    float GetInnerCellSize()
     {
-        float dx = Mathf.Max(0.05f, sampleRadius);
-        float dz = Mathf.Max(0.05f, sampleRadius);
-
-        float hL = GetHeightAt(worldPos + new Vector3(-dx, 0f, 0f));
-        float hR = GetHeightAt(worldPos + new Vector3(dx, 0f, 0f));
-        float hD = GetHeightAt(worldPos + new Vector3(0f, 0f, -dz));
-        float hU = GetHeightAt(worldPos + new Vector3(0f, 0f, dz));
-
-        float slopeX = (hR - hL) / (2f * dx);
-        float slopeZ = (hU - hD) / (2f * dz);
-
-        Vector3 n = new Vector3(-slopeX, 1f, -slopeZ);
-        return n.normalized;
+        int H = Mathf.Max(1, lodHighRes);
+        float halfCube = Mathf.Max(1f, lodCubeSize * 0.5f);
+        return (halfCube * 2f) / H; // world meters per inner-grid cell
     }
 
-    // Approximate vertical amplitude from all active octaves, matching WavesJob logic.
-    public float EstimateSurfaceAmplitude()
+    private Vector3 GetCubeCenter()
     {
-        if (octaves == null || octaves.Length == 0) return 1f;
+        Vector3 camPos = Camera.main != null ? Camera.main.transform.position : Vector3.zero;
 
-        float total = 0f;
-        for (int i = 0; i < octaves.Length; i++)
-        {
-            var oc = octaves[i];
-            if (!oc.active) continue;
+        float cell = GetInnerCellSize();
+        float x = Mathf.Round(camPos.x / cell) * cell;
+        float z = Mathf.Round(camPos.z / cell) * cell;
 
-            // Matches the env response used in WavesJob (height section)
-            float ampFromEnv = 1f;
-            if (i == 0)
-                ampFromEnv += currentStrength * oc.currentResponse * 1.2f;   // first octave boosted by current
-            else
-                ampFromEnv += (windStrength * oc.windResponse + currentStrength * oc.currentResponse) * 0.3f;
-
-            total += Mathf.Abs(oc.height * ampFromEnv);
-        }
-
-        // total ≈ "±" amplitude around sea level (peak ~ sum|dynH|)
-        return Mathf.Max(0.1f, total);
+        // keep sea level (y) from the water object
+        return new Vector3(x, transform.position.y, z);
     }
 
+    // Existing mesh builders retained…
 
-    // ---------- Native arrays & copying ----------
-
-    private void EnsureVertexArray()
+    // ---------- Migration & validation ----------
+    void OnValidate()
     {
-        if (vertexData.IsCreated) vertexData.Dispose();
-        vertexData = new NativeArray<float3>(vertices.Length, Allocator.Persistent);
-        lastVertexCount = vertices.Length;
-    }
+        if (octaves == null) return;
 
-    private void EnsureUVArray()
-    {
-        if (uvData.IsCreated) uvData.Dispose();
-        uvData = new NativeArray<float2>(uvs.Length, Allocator.Persistent);
-    }
-
-    private void EnsureOctaveArray()
-    {
-        if (octaveData.IsCreated) octaveData.Dispose();
-        octaveData = new NativeArray<OctaveData>(octaves.Length, Allocator.Persistent);
-        lastOctaveCount = octaves.Length;
-    }
-
-    private void CopyMeshVerticesToNative()
-    {
-        for (int i = 0; i < vertices.Length; i++)
-            vertexData[i] = vertices[i];
-    }
-
-    private void CopyMeshUVsToNative()
-    {
-        for (int i = 0; i < uvs.Length; i++)
-            uvData[i] = new float2(uvs[i].x, uvs[i].y);
-    }
-
-    private void CopyOctavesToNative()
-    {
         for (int i = 0; i < octaves.Length; i++)
         {
             var o = octaves[i];
-            octaveData[i] = new OctaveData
+
+            // If this asset was saved with the old 'speed' field, FormerlySerializedAs
+            // will place that vector into 'direction'. Convert its length to moveSpeed
+            // and normalize to keep behavior identical.
+            if (o.moveSpeed <= 1e-5f && o.direction.sqrMagnitude > 1e-6f)
             {
-                scale = o.scale,
-                speed = o.speed,
-                height = o.height,
-                perlinBlend = o.perlinBlend,
-                baseScaleMultiplier = o.baseScaleMultiplier,
-                active = o.active,
-                windResponse = o.windResponse,
-                currentResponse = o.currentResponse,
-                scaleFrequencyBoost = o.scaleFrequencyBoost
-            };
+                o.moveSpeed = o.direction.magnitude;
+                if (o.moveSpeed > 1e-5f) o.direction /= o.moveSpeed;
+            }
+
+            // If no direction after migration, fall back to global wind or +X
+            if (o.direction.sqrMagnitude <= 1e-6f)
+            {
+                var w = windDirection.sqrMagnitude > 0f ? windDirection.normalized : new Vector2(1f, 0f);
+                o.direction = w;
+            }
+
+            octaves[i] = o;
         }
     }
 
-    private void DisposeArrays()
+    // ---------- Helpers ----------
+    private int HashArray(int[] arr)
     {
-        if (vertexData.IsCreated) vertexData.Dispose();
-        if (uvData.IsCreated) uvData.Dispose();
-        if (octaveData.IsCreated) octaveData.Dispose();
+        unchecked { int h = 17; for (int i = 0; i < arr.Length; i++) h = h * 31 + arr[i]; return h; }
     }
-
-    // ---------- Gizmos ----------
-
-    private void OnDrawGizmos()
+    private int HashArray(float[] arr)
     {
-        if (Camera.main == null) return;
-        Vector3 center = GetCubeCenter();
-        Vector3 size = new Vector3(lodCubeSize, lodCubeSize, lodCubeSize);
-        Gizmos.color = Color.cyan; Gizmos.DrawWireCube(center, size);
-        Gizmos.color = Color.blue; Gizmos.DrawSphere(center, 2f);
-    }
-
-    // ---------- Types & utils ----------
-
-    [Serializable]
-    public struct Octave
-    {
-        public Vector2 speed;
-        public Vector2 scale;
-        public float height;
-        [Range(0f, 1f)] public float perlinBlend;
-        public float baseScaleMultiplier;
-        public bool active;
-        [Range(0f, 2f)] public float windResponse;
-        [Range(0f, 2f)] public float currentResponse;
-
-        // NEW
-        [UnityEngine.Tooltip("How strongly Scale affects frequency for this octave (1 = raw, 4 = punchy).")]
-        public float scaleFrequencyBoost;
-    }
-
-    private static int HashArray(int[] arr)
-    {
-        unchecked
-        {
-            int h = 17;
-            for (int i = 0; i < arr.Length; i++) h = h * 31 + arr[i];
-            return h;
-        }
-    }
-    private static int HashArray(float[] arr)
-    {
-        unchecked
-        {
-            int h = 17;
-            for (int i = 0; i < arr.Length; i++) h = h * 31 + arr[i].GetHashCode();
-            return h;
-        }
+        unchecked { int h = 17; for (int i = 0; i < arr.Length; i++) h = h * 31 + Mathf.RoundToInt(arr[i] * 1000f); return h; }
     }
 }
