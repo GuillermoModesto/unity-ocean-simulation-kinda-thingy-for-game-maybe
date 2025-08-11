@@ -106,7 +106,7 @@ Auto‑generated class from `PlayerInputActions.inputactions` providing a `BoatC
 ## Shaders
 
 - **Water surface:** `Custom/Water_SimpleZWrite` (source `Waves2.shader`). Reads `_WindDir`, `_CurrentDir`, `_WaveTime`, `_UseExternalTime`, `_SeaLevel`, `_HeightRange`, and optional `_WakeMap`/`_WakeUV` supplied by `WaterShaderDriver`.
-- **Wake passes (Hidden):**
+- **Wake passes (does not work):**
   - `Hidden/WakeWrite` – draws the current splat onto the wake RT.
   - `Hidden/WakeDecay` – fades and blurs the previous frame.
 
@@ -134,10 +134,3 @@ Auto‑generated class from `PlayerInputActions.inputactions` providing a `BoatC
 
 - The water surface uses **vertex displacement** only (no true 3D volume), so extreme breaking waves aren’t represented.
 - The wake texture is a **2D mask** in world UVs; sampling/parallax is intentionally simple for speed.
-
----
-
-## License
-
-MIT (or your project’s license here).
-
