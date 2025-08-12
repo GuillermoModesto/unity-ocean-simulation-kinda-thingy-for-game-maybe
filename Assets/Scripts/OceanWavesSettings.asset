@@ -15,23 +15,23 @@ MonoBehaviour:
   uvOffset: {x: 0, y: 0}
   choppiness: 1
   waves:
-  - amplitude: 0
-    steepness: 0
-    wavelength: 0
+  - amplitude: 1.98
+    steepness: 1
+    wavelength: 32.6
     speed: 0
     directionDegrees: 0
-  - amplitude: 0
+  - amplitude: 0.99
+    steepness: 1
+    wavelength: 9.45
+    speed: 10.42
+    directionDegrees: 30
+  - amplitude: 0.47
     steepness: 0
-    wavelength: 0
+    wavelength: 6
     speed: 0
-    directionDegrees: 0
-  - amplitude: 0
-    steepness: 0
-    wavelength: 0
-    speed: 0
-    directionDegrees: 0
-  - amplitude: 0
-    steepness: 0
-    wavelength: 0
+    directionDegrees: 75
+  - amplitude: 0.2
+    steepness: 0.45
+    wavelength: 24
     speed: 0
     directionDegrees: 0

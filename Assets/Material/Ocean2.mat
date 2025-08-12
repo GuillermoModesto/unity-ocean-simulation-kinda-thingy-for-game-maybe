@@ -1,0 +1,95 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: Ocean2
+  m_Shader: {fileID: 4800000, guid: ef87f095396812042909b5fd95d51414, type: 3}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords: []
+  m_InvalidKeywords: []
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_LockedProperties: 
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs:
+    - _FoamTex:
+        m_Texture: {fileID: 2800000, guid: 1123872b16e3bf644a0c957912b9809f, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _NormalA:
+        m_Texture: {fileID: 2800000, guid: 00eb698b6fdbb6744aac19d4536d34c5, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _NormalB:
+        m_Texture: {fileID: 2800000, guid: 00eb698b6fdbb6744aac19d4536d34c5, type: 3}
+        m_Scale: {x: 1.24, y: 0.7}
+        m_Offset: {x: 1.39, y: 0}
+    - _WakeMap:
+        m_Texture: {fileID: 2800000, guid: 092e211ceacfa434e98be565c4fbe886, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    m_Ints: []
+    m_Floats:
+    - _AlphaBase: 0.717
+    - _AlphaFresnel: 0.231
+    - _FoamAmount: 2
+    - _FoamCurvAmt: 0.82
+    - _FoamEnabled: 1
+    - _FoamHeightBias: 0.117
+    - _FoamSharp: 1.84
+    - _FresnelBoost: 0.91
+    - _FresnelPower: 5.28
+    - _HeightRange: 14.81
+    - _NormalAStr: 0.32
+    - _NormalBStr: 0.47
+    - _NormalFadeEnd: 120
+    - _NormalFadeStart: 15
+    - _NormalSlopeAtten: 0.637
+    - _NormalStrength: 0.45
+    - _NormalViewAtten: 0.695
+    - _RampShift: -0.214
+    - _RampSoftness: 0.507
+    - _SandBrightness: 0.986
+    - _SandSaturation: 1
+    - _SandStrength: 0.208
+    - _SeaLevel: 0.26
+    - _Smoothness: 0.749
+    - _SpecularStrength: 0.36
+    - _WakeFoamStrength: 0.17
+    - _WakeNormalStrength: 0.149
+    m_Colors:
+    - _AbyssColor: {r: 0.005, g: 0.059999965, b: 0.11999995, a: 1}
+    - _AquaColor: {r: 0.17999998, g: 0.78, b: 0.85, a: 1}
+    - _BlueColor: {r: 0, g: 0.27999997, b: 0.5, a: 1}
+    - _CobaltColor: {r: 0, g: 0.35999998, b: 0.62, a: 1}
+    - _DeepColor: {r: 0.01, g: 0.10999996, b: 0.19999996, a: 1}
+    - _EmeraldColor: {r: 0.02, g: 0.54999995, b: 0.45999992, a: 1}
+    - _FoamColor: {r: 1, g: 1, b: 1, a: 1}
+    - _FoamSpeed: {r: 0.12, g: 0.08, b: 0, a: 0}
+    - _FoamTiling: {r: 0.12, g: 0.12, b: 0, a: 0}
+    - _JadeColor: {r: 0.02, g: 0.4699999, b: 0.5, a: 1}
+    - _MidColor: {r: 0.059999965, g: 0.34999996, b: 0.54999995, a: 1}
+    - _MintColor: {r: 0.6399999, g: 0.93, b: 0.9, a: 1}
+    - _NormalASpeed: {r: 0.03, g: 0.01, b: 0, a: 0}
+    - _NormalATiling: {r: 0.08, g: 0.08, b: 0, a: 0}
+    - _NormalBSpeed: {r: -0.02, g: 0, b: 0, a: 0}
+    - _NormalBTiling: {r: 0.24, g: 0.24, b: 0, a: 0}
+    - _RimColor: {r: 0.8, g: 0.96999997, b: 1, a: 1}
+    - _SandColor: {r: 0.86, g: 0.88, b: 0.8399999, a: 1}
+    - _ShallowColor: {r: 0.72, g: 0.96, b: 0.92, a: 1}
+    - _SpecularColor: {r: 0.9, g: 0.95, b: 1, a: 1}
+    - _TurquoiseColor: {r: 0.23999995, g: 0.88, b: 0.86, a: 1}
+    - _WakeUV: {r: 0.02, g: 0, b: 0, a: 0}
+  m_BuildTextureStacks: []
+  m_AllowLocking: 1

@@ -25,10 +25,12 @@ Material:
     m_TexEnvs: []
     m_Ints: []
     m_Floats:
-    - _FoamIntensity: 2.6
-    - _FoamThreshold: 0.972
-    - _Smoothness: 0.85
-    - _Specular: 0.119
+    - _FoamEnabled: 0.072
+    - _FoamIntensity: 0.4
+    - _FoamThreshold: 0.276
+    - _Opacity: 1
+    - _Smoothness: 0.68
+    - _Specular: 0.019
     m_Colors:
     - _BaseColor: {r: 0.03, g: 0.11999995, b: 0.19999996, a: 1}
     - _FoamColor: {r: 0.9, g: 0.95, b: 1, a: 1}
