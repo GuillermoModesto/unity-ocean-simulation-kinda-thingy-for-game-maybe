@@ -1,6 +1,6 @@
-﻿// Ocean.cs — minimal: single settings asset, no presets/slider/phase anchor.
-// Keeps: naturalized Gerstner, optional interactions, fixed-size arrays,
-// opaque-at-1 transparency, CPU sampling, and camera-centered mesh.
+﻿// Ocean.cs — single settings asset + Storminess slider (physically safe).
+// Keeps: naturalized Gerstner waves, optional interactions, fixed-size shader arrays,
+// transparency=1 → opaque, CPU sampling, camera-centered mesh.
 
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -26,6 +26,20 @@ public class Ocean : MonoBehaviour
     [Header("Choppiness")]
     [Tooltip("Global choppiness multiplier (scales steepness for both GPU & CPU).")]
     public float choppiness = 1f;
+
+    // ---- NEW: Storminess ----------------------------------------------------
+    [Header("Storminess (0 = calm / 1 = storm)")]
+    [Range(0f, 1f)]
+    [Tooltip("Scales amplitudes (wave height) and steepness with stability enforcement (S·k·A < 1).")]
+    public float storminess = 0f;
+
+    [Tooltip("Amplitude multiplier when Storminess = 1. A=H/2, so 4.5 ≈ height ×4.5 (e.g., ~1–2 m → ~5–12 m).")]
+    [Min(1f)] public float stormAmplitudeAt1 = 10f;
+
+    [Tooltip("Steepness multiplier when Storminess = 1 (moderate; clamped by stability rule).")]
+    [Min(1f)] public float stormSteepnessAt1 = 2.5f;
+
+    // ------------------------------------------------------------------------
 
     [Header("Natural Variation")]
     [Tooltip("Enable extra realism: split each wave into several components with slight dir/freq/phase differences.")]
@@ -70,6 +84,9 @@ public class Ocean : MonoBehaviour
     private Material _appliedMat;
     private OceanWaveSettings _lastSettings;
 
+    // track live changes
+    private float _lastStorminess = -1f;
+
     // ===== Unity lifecycle =====
     void OnEnable()
     {
@@ -85,6 +102,7 @@ public class Ocean : MonoBehaviour
         RecomputeAndApplyEffectiveWaves();
         UpdateMaterialProps(GetTimeSeconds());
         AdjustRenderQueueForTransparency();
+        _lastStorminess = storminess;
     }
 
     void OnDisable()
@@ -107,6 +125,7 @@ public class Ocean : MonoBehaviour
         RecomputeAndApplyEffectiveWaves();
         UpdateMaterialProps(GetTimeSeconds());
         AdjustRenderQueueForTransparency();
+        _lastStorminess = storminess;
     }
 
     void Update()
@@ -125,6 +144,13 @@ public class Ocean : MonoBehaviour
         if (settings != _lastSettings)
         {
             ResubscribeSettings(settings);
+            RecomputeAndApplyEffectiveWaves();
+        }
+
+        // live storminess updates
+        if (!Mathf.Approximately(_lastStorminess, storminess))
+        {
+            _lastStorminess = storminess;
             RecomputeAndApplyEffectiveWaves();
         }
 
@@ -166,7 +192,7 @@ public class Ocean : MonoBehaviour
         }
     }
 
-    // ===== Settings live updates (Custom asset edits) =====
+    // ===== Settings live updates =====
     void ResubscribeSettings(OceanWaveSettings newSettings)
     {
         if (_lastSettings != null)
@@ -195,12 +221,12 @@ public class Ocean : MonoBehaviour
         count = Mathf.Min(count, MAX_WAVES);
 
         // Copy into fixed-size arrays
-        System.Array.Clear(_dirTmp, 0, MAX_WAVES);
-        System.Array.Clear(_wlTmp, 0, MAX_WAVES);
+        Array.Clear(_dirTmp, 0, MAX_WAVES);
+        Array.Clear(_wlTmp, 0, MAX_WAVES);
         if (count > 0)
         {
-            System.Array.Copy(dir_amp_steep, _dirTmp, count);
-            System.Array.Copy(wl_omega_phi, _wlTmp, count);
+            Array.Copy(dir_amp_steep, _dirTmp, count);
+            Array.Copy(wl_omega_phi, _wlTmp, count);
         }
 
         // Push to material
@@ -236,11 +262,17 @@ public class Ocean : MonoBehaviour
                         : splits == 2 ? new float[] { 0.6f, 0.4f }
                                       : new float[] { 1f };
 
-        // Jitter toggles
+        // Effective jitter toggles
         float dirSpread = naturalize ? directionSpreadDeg : 0f;
         float ampJit = naturalize ? amplitudeJitter : 0f;
         float wlJit = naturalize ? wavelengthJitter : 0f;
         float omgJit = naturalize ? omegaJitter : 0f;
+
+        // Storm sliders -> multipliers
+        float ampMulMax = Mathf.Max(1f, stormAmplitudeAt1);
+        float steepMulMax = Mathf.Max(1f, stormSteepnessAt1);
+        float ampMul = Mathf.Lerp(1f, ampMulMax, Mathf.Clamp01(storminess));
+        float steepMul = Mathf.Lerp(1f, steepMulMax, Mathf.Clamp01(storminess));
 
         var dirList = new List<Vector4>(Mathf.Min(waves.Length * splits, MAX_WAVES));
         var wlList = new List<Vector4>(dirList.Capacity);
@@ -266,20 +298,33 @@ public class Ocean : MonoBehaviour
                 float ca = Mathf.Cos(angle), sa = Mathf.Sin(angle);
                 Vector2 D = new Vector2(Dbase.x * ca - Dbase.y * sa, Dbase.x * sa + Dbase.y * ca).normalized;
 
-                float ampMul = 1f + ampJit * RandSigned(key + 101);
+                float ampMulJ = 1f + ampJit * RandSigned(key + 101);
                 float wlMul = 1f + wlJit * RandSigned(key + 202);
                 float omgMul = 1f + omgJit * RandSigned(key + 303);
 
                 float share = weights[Mathf.Min(s, weights.Length - 1)];
-                float A = wv.amplitude * share * ampMul;
+                float A = wv.amplitude * share * ampMulJ;
+
+                // --- Storminess: grow amplitude ---
+                A *= ampMul;
+
                 float WL = Mathf.Max(0.001f, wv.wavelength * wlMul);
 
                 float k = 2f * Mathf.PI / WL;
                 float omg = (wv.speed > 0f) ? k * wv.speed : Mathf.Sqrt(gravity * k);
                 omg *= omgMul;
 
+                // Base steepness
                 float S_eff = wv.steepness * choppiness * assetChop;
 
+                // --- Storminess: nudge steepness (clamped by S·k·A < 1) ---
+                S_eff *= steepMul;
+
+                // Stability clamp: keep S·k·A < 1 (with a little margin)
+                float limit = 0.95f / Mathf.Max(1e-6f, k * Mathf.Max(1e-6f, A));
+                if (S_eff > limit) S_eff = limit;
+
+                // Random initial phase 0..2π
                 float phi = Rand01(key + 404) * Mathf.PI * 2f;
 
                 dirList.Add(new Vector4(D.x, D.y, A, S_eff));
