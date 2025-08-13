@@ -43,29 +43,30 @@ Material:
     m_Floats:
     - _AlphaBase: 0.717
     - _AlphaFresnel: 0.231
-    - _FoamAmount: 2
-    - _FoamCurvAmt: 0.82
+    - _FoamAmount: 1.77
+    - _FoamCurvAmt: 2
     - _FoamEnabled: 1
-    - _FoamHeightBias: 0.117
-    - _FoamSharp: 1.84
-    - _FresnelBoost: 0.91
-    - _FresnelPower: 5.28
+    - _FoamHeightBias: 0.498
+    - _FoamSharp: 0.77
+    - _FresnelBoost: 0.55
+    - _FresnelPower: 4.96
     - _HeightRange: 14.81
     - _NormalAStr: 0.32
     - _NormalBStr: 0.47
     - _NormalFadeEnd: 120
     - _NormalFadeStart: 15
     - _NormalSlopeAtten: 0.637
-    - _NormalStrength: 0.45
+    - _NormalStrength: 0.444
     - _NormalViewAtten: 0.695
-    - _RampShift: -0.214
-    - _RampSoftness: 0.507
+    - _RampShift: 0.086
+    - _RampSoftness: 0.399
     - _SandBrightness: 0.986
     - _SandSaturation: 1
     - _SandStrength: 0.208
-    - _SeaLevel: 0.26
-    - _Smoothness: 0.749
-    - _SpecularStrength: 0.36
+    - _SeaLevel: 0
+    - _Smoothness: 0.059
+    - _SpecularStrength: 0.05
+    - _Transparency: 1
     - _WakeFoamStrength: 0.17
     - _WakeNormalStrength: 0.149
     m_Colors:
