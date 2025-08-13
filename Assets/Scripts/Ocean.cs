@@ -7,7 +7,7 @@ using UnityEngine.Rendering;
 using System;
 using System.Collections.Generic;
 
-[ExecuteAlways, RequireComponent(typeof(MeshRenderer), typeof(MeshFilter))]
+[RequireComponent(typeof(MeshRenderer), typeof(MeshFilter))]
 public class Ocean : MonoBehaviour
 {
     [Header("Wave Settings")]
@@ -469,50 +469,73 @@ public class Ocean : MonoBehaviour
 #endif
     }
 
-    // ===== Public CPU sampling =====
-    /// <summary>Sample ocean at world XZ; returns WORLD water height and normal at time t (defaults to now).</summary>
-    public static void Sample(Vector2 worldXZ, out float height, out Vector3 normal, float t = -1f)
+    // ===== Public CPU sampling (robust for choppiness) =====
+    public static void Sample(Vector2 worldXZ, out float height, out Vector3 normal, float t = -1f, int iterations = 4)
     {
         height = 0f; normal = Vector3.up;
         if (_instance == null || _instance._cpuWaves == null) return;
         if (t < 0f) t = _instance.GetTimeSeconds();
 
-        Vector2 xz = worldXZ - _instance.transform.position.XZ();
+        Vector2 xzTarget = worldXZ - _instance.transform.position.XZ();
 
+        // --- Inverse mapping: solve for x0 so x0 + dispH(x0) == xzTarget
+        Vector2 x0 = xzTarget;
+        for (int it = 0; it < Mathf.Max(0, iterations); it++)
+        {
+            Vector2 dispH = Vector2.zero;
+            var waves = _instance._cpuWaves;
+            for (int i = 0; i < waves.Length; i++)
+            {
+                var w = waves[i];
+                float dot = w.D.x * x0.x + w.D.y * x0.y;
+                float phase = w.k * dot - w.w * t + w.phi;   // phi included (matches shader fix)
+                float c = Mathf.Cos(phase);
+                float QA = w.S * w.A;
+                dispH.x += QA * w.D.x * c;
+                dispH.y += QA * w.D.y * c;
+            }
+            Vector2 xNew = xzTarget - dispH;
+            if ((xNew - x0).sqrMagnitude < 1e-7f) { x0 = xNew; break; }
+            x0 = xNew;
+        }
+
+        // --- Evaluate displacement + derivatives at x0
         Vector3 disp = Vector3.zero;
         Vector3 dPdX = new Vector3(1f, 0f, 0f);
         Vector3 dPdZ = new Vector3(0f, 0f, 1f);
 
-        var waves = _instance._cpuWaves;
-        for (int i = 0; i < waves.Length; i++)
         {
-            var w = waves[i];
-            float dot = w.D.x * xz.x + w.D.y * xz.y;
-            float phase = w.k * dot - w.w * t + w.phi;
-            float c = Mathf.Cos(phase);
-            float s = Mathf.Sin(phase);
+            var waves = _instance._cpuWaves;
+            for (int i = 0; i < waves.Length; i++)
+            {
+                var w = waves[i];
+                float dot = w.D.x * x0.x + w.D.y * x0.y;
+                float phase = w.k * dot - w.w * t + w.phi;
+                float c = Mathf.Cos(phase), s = Mathf.Sin(phase);
+                float QA = w.S * w.A;
 
-            float QA = w.S * w.A;
+                disp.x += QA * w.D.x * c;
+                disp.y += w.A * s;
+                disp.z += QA * w.D.y * c;
 
-            disp.x += QA * w.D.x * c;
-            disp.y += w.A * s;
-            disp.z += QA * w.D.y * c;
+                float dxp = w.k * w.D.x;
+                float dzp = w.k * w.D.y;
 
-            float dxp = w.k * w.D.x;
-            float dzp = w.k * w.D.y;
+                dPdX.x += -QA * w.D.x * dxp * s;
+                dPdX.y += w.A * dxp * c;
+                dPdX.z += -QA * w.D.y * dxp * s;
 
-            dPdX.x += -QA * w.D.x * dxp * s;
-            dPdX.y += w.A * dxp * c;
-            dPdX.z += -QA * w.D.y * dxp * s;
-
-            dPdZ.x += -QA * w.D.x * dzp * s;
-            dPdZ.y += w.A * dzp * c;
-            dPdZ.z += -QA * w.D.y * dzp * s;
+                dPdZ.x += -QA * w.D.x * dzp * s;
+                dPdZ.y += w.A * dzp * c;
+                dPdZ.z += -QA * w.D.y * dzp * s;
+            }
         }
 
-        normal = Vector3.Normalize(Vector3.Cross(dPdZ, dPdX)); // up on flat patch
-        height = _instance.transform.position.y + disp.y;      // world height
+        normal = Vector3.Normalize(Vector3.Cross(dPdZ, dPdX));
+        height = _instance.transform.position.y + disp.y;
     }
+
+
 }
 
 static class OceanVecExt

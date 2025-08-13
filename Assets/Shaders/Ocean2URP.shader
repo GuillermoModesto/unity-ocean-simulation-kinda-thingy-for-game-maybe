@@ -167,9 +167,10 @@ Shader "Ocean/GerstnerURP_Simplified_Green"
                     float  S = _DirAmpSteep[i].w;
                     float  wl = _WlOmegaPad[i].x;
                     float  w  = _WlOmegaPad[i].y;
+                    float  phi = _WlOmegaPad[i].z;
 
                     float k = 2.0 * PI / max(0.001, wl);
-                    float phase = k * dot(D, xz) - w * _TimeSeconds;
+                    float phase = k * dot(D, xz) - w * _TimeSeconds + phi;
                     float c = cos(phase), s = sin(phase);
                     float QA = S * A;
 
