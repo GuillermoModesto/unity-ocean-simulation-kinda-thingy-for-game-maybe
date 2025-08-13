@@ -1,28 +1,17 @@
-﻿// Ocean.cs — naturalized Gerstner + pairwise interactions + opaque toggle at Transparency=1
-// Includes: preset blending, live updates, fixed-size shader arrays, material sync, correct mesh/CPU normals
+﻿// Ocean.cs — minimal: single settings asset, no presets/slider/phase anchor.
+// Keeps: naturalized Gerstner, optional interactions, fixed-size arrays,
+// opaque-at-1 transparency, CPU sampling, and camera-centered mesh.
+
 using UnityEngine;
 using UnityEngine.Rendering;
 using System;
 using System.Collections.Generic;
 
-[RequireComponent(typeof(MeshRenderer), typeof(MeshFilter))]
+[ExecuteAlways, RequireComponent(typeof(MeshRenderer), typeof(MeshFilter))]
 public class Ocean : MonoBehaviour
 {
-    public enum PresetMode { Custom, Normal, Choppy, Storm }
-
-    [Header("Wave Data (Custom Mode)")]
-    public OceanWaveSettings settings;     // used when Selected Preset = Custom
-
-    [Header("Presets")]
-    public OceanWaveSettings presetNormal;
-    public OceanWaveSettings presetChoppy;
-    public OceanWaveSettings presetStorm;
-
-    [Header("Preset Switch")]
-    public PresetMode selectedPreset = PresetMode.Custom;
-    [Tooltip("Seconds to blend when you change 'Selected Preset'.")]
-    public float blendDuration = 3f;
-    public AnimationCurve blendCurve = AnimationCurve.EaseInOut(0, 0, 1, 1);
+    [Header("Wave Settings")]
+    public OceanWaveSettings settings;     // The single source of truth
 
     [Header("Material / Physics")]
     public Material oceanMaterial;
@@ -34,7 +23,7 @@ public class Ocean : MonoBehaviour
     [Min(4)] public int zVerts = 256;
     [Min(0.01f)] public float spacing = 2f;
 
-    [Header("Misc")]
+    [Header("Choppiness")]
     [Tooltip("Global choppiness multiplier (scales steepness for both GPU & CPU).")]
     public float choppiness = 1f;
 
@@ -64,26 +53,22 @@ public class Ocean : MonoBehaviour
     public bool forceOpaqueAtFull = true;
 
     // ===== Internals =====
-    private const int MAX_WAVES = 32;                  // Keep in sync with shader
-    private Vector4[] _dirTmp = new Vector4[MAX_WAVES]; // fixed-size scratch buffers
-    private Vector4[] _wlTmp = new Vector4[MAX_WAVES];
-    private bool _arraysPrimed = false;                // have we established fixed array sizes on the material?
+    private const int MAX_WAVES = 32;                   // Keep in sync with shader
+    private Vector4[] _dirTmp = new Vector4[MAX_WAVES]; // (Dx, Dz, A, S)
+    private Vector4[] _wlTmp = new Vector4[MAX_WAVES]; // (WL, omega, phi, _)
+    private bool _arraysPrimed = false;
 
     private struct WaveCPU
     {
-        public float A, k, w, S, phi; // amplitude, wavenumber, angular frequency, steepness (effective), phase offset
+        public float A, k, w, S, phi; // amplitude, wavenumber, angular frequency, steepness, phase offset
         public Vector2 D;             // unit dir (x,z)
     }
 
     private WaveCPU[] _cpuWaves = Array.Empty<WaveCPU>();
     private static Ocean _instance;
 
-    private Material _appliedMat;                 // track swaps so we can re-push uniforms
-    private OceanWaveSettings _lastSettings;      // for Custom mode subscription
-    private PresetMode _activePreset;             // where we are now (start of blend)
-    private OceanWaveSettings _fromAsset, _toAsset; // blend endpoints
-    private float _blendStartTime = -1f;
-    private PresetMode _lastSelectedPreset;       // to detect inspector changes
+    private Material _appliedMat;
+    private OceanWaveSettings _lastSettings;
 
     // ===== Unity lifecycle =====
     void OnEnable()
@@ -92,19 +77,12 @@ public class Ocean : MonoBehaviour
 
         _appliedMat = oceanMaterial;
         SyncRendererMaterial();
-        PrimeArrayLengths();                      // establish fixed-size arrays on the material
+        PrimeArrayLengths();
 
-        // subscribe to Custom asset changes
         ResubscribeSettings(settings);
 
-        // initialize preset state
-        _activePreset = selectedPreset;
-        _lastSelectedPreset = selectedPreset;
-        _fromAsset = GetAssetForPreset(selectedPreset);
-        _toAsset = _fromAsset; // no blend yet
-
         EnsureMesh();
-        RecomputeAndApplyEffectiveWaves(0f);      // build arrays & CPU waves
+        RecomputeAndApplyEffectiveWaves();
         UpdateMaterialProps(GetTimeSeconds());
         AdjustRenderQueueForTransparency();
     }
@@ -125,14 +103,8 @@ public class Ocean : MonoBehaviour
         if (settings != _lastSettings)
             ResubscribeSettings(settings);
 
-        if (selectedPreset != _lastSelectedPreset)
-        {
-            BeginBlendToPreset(selectedPreset);
-            _lastSelectedPreset = selectedPreset;
-        }
-
         EnsureMesh();
-        RecomputeAndApplyEffectiveWaves(CurrentBlendAlpha());
+        RecomputeAndApplyEffectiveWaves();
         UpdateMaterialProps(GetTimeSeconds());
         AdjustRenderQueueForTransparency();
     }
@@ -141,33 +113,26 @@ public class Ocean : MonoBehaviour
     {
         if (!oceanMaterial) return;
 
-        // material hot-swap
         if (_appliedMat != oceanMaterial)
         {
             _appliedMat = oceanMaterial;
             SyncRendererMaterial();
-            _arraysPrimed = false;       // new material -> prime again
+            _arraysPrimed = false;
             PrimeArrayLengths();
-            RecomputeAndApplyEffectiveWaves(CurrentBlendAlpha());
+            RecomputeAndApplyEffectiveWaves();
         }
 
-        // settings reference swap at runtime (Custom mode edits)
         if (settings != _lastSettings)
         {
             ResubscribeSettings(settings);
-            RecomputeAndApplyEffectiveWaves(CurrentBlendAlpha());
+            RecomputeAndApplyEffectiveWaves();
         }
 
-        // drive time/origin
         UpdateMaterialProps(GetTimeSeconds());
         AdjustRenderQueueForTransparency();
-
-        // recompute during blends
-        if (IsBlending())
-            RecomputeAndApplyEffectiveWaves(CurrentBlendAlpha());
     }
 
-    // ===== Fixed-size array priming to avoid Unity "cap to previous size" warnings =====
+    // ===== Fixed-size array priming (prevents Unity "cap to previous size" warnings) =====
     private void PrimeArrayLengths()
     {
         if (!oceanMaterial || _arraysPrimed) return;
@@ -195,44 +160,9 @@ public class Ocean : MonoBehaviour
         var mr = GetComponent<MeshRenderer>();
         if (mr && mr.sharedMaterial == oceanMaterial)
         {
-            // Geometry = 2000; Transparent = 3000
             int target = (a >= 0.999f) ? (int)RenderQueue.Geometry : (int)RenderQueue.Transparent;
             if (mr.sharedMaterial.renderQueue != target)
                 mr.sharedMaterial.renderQueue = target;
-        }
-    }
-
-    // ===== Preset blend control =====
-    void BeginBlendToPreset(PresetMode target)
-    {
-        _fromAsset = GetAssetForPreset(_activePreset);
-        _toAsset = GetAssetForPreset(target);
-        _blendStartTime = GetTimeSeconds();
-        _activePreset = target;
-    }
-
-    bool IsBlending()
-    {
-        if (_blendStartTime < 0f) return false;
-        if (blendDuration <= 0f) return false;
-        return CurrentBlendAlpha() < 1f;
-    }
-
-    float CurrentBlendAlpha()
-    {
-        if (_blendStartTime < 0f || blendDuration <= 0f) return 1f;
-        float t = Mathf.Clamp01((GetTimeSeconds() - _blendStartTime) / Mathf.Max(0.0001f, blendDuration));
-        return (blendCurve != null) ? Mathf.Clamp01(blendCurve.Evaluate(t)) : t;
-    }
-
-    OceanWaveSettings GetAssetForPreset(PresetMode mode)
-    {
-        switch (mode)
-        {
-            case PresetMode.Normal: return presetNormal ? presetNormal : settings;
-            case PresetMode.Choppy: return presetChoppy ? presetChoppy : settings;
-            case PresetMode.Storm: return presetStorm ? presetStorm : settings;
-            default: return settings;
         }
     }
 
@@ -250,95 +180,50 @@ public class Ocean : MonoBehaviour
 
     void OnSettingsChanged()
     {
-        RecomputeAndApplyEffectiveWaves(CurrentBlendAlpha());
+        RecomputeAndApplyEffectiveWaves();
     }
 
-    // ===== Building & applying wave data =====
-    void RecomputeAndApplyEffectiveWaves(float alpha)
+    // ===== Build & apply wave data =====
+    void RecomputeAndApplyEffectiveWaves()
     {
-        PrimeArrayLengths(); // ensure arrays exist at fixed size on the material
+        PrimeArrayLengths();
 
-        var A = _fromAsset ? _fromAsset : settings;
-        var B = _toAsset ? _toAsset : settings;
+        int count; Vector4[] dir_amp_steep; Vector4[] wl_omega_phi; WaveCPU[] cpu; float assetChop;
+        BakeFromAsset(settings, out count, out dir_amp_steep, out wl_omega_phi, out cpu, out assetChop, 0xA1B2C3D ^ randomSeed);
 
-        int countA; Vector4[] dirA, wlA; WaveCPU[] cpuA; float chopA;
-        int countB; Vector4[] dirB, wlB; WaveCPU[] cpuB; float chopB;
-
-        BakeFromAsset(A, out countA, out dirA, out wlA, out cpuA, out chopA, 0xA1B2C3D ^ randomSeed);
-        BakeFromAsset(B, out countB, out dirB, out wlB, out cpuB, out chopB, 0xD3C2B1A ^ randomSeed);
-
-        int count = Mathf.Max(countA, countB);
+        // Clamp to fixed buffer
         count = Mathf.Min(count, MAX_WAVES);
 
-        var dir_amp_steep = new Vector4[count];
-        var wl_omega_phi = new Vector4[count];
-        var cpu = new WaveCPU[count];
-
-        for (int i = 0; i < count; i++)
-        {
-            Vector4 da = (i < countA) ? dirA[i] : Vector4.zero; // Dx, Dz, A, S_eff
-            Vector4 wa = (i < countA) ? wlA[i] : Vector4.zero; // WL, omega, phi
-            Vector4 db = (i < countB) ? dirB[i] : Vector4.zero;
-            Vector4 wb = (i < countB) ? wlB[i] : Vector4.zero;
-
-            // Direction blend (lerp then renormalize)
-            Vector2 D_a = new Vector2(da.x, da.y);
-            Vector2 D_b = new Vector2(db.x, db.y);
-            Vector2 D_l = (D_a == Vector2.zero && D_b == Vector2.zero) ? Vector2.right : Vector2.Lerp(D_a, D_b, alpha);
-            if (D_l.sqrMagnitude < 1e-6f) D_l = (D_a.sqrMagnitude > 1e-6f ? D_a : Vector2.right);
-            D_l.Normalize();
-
-            // Scalars linear; phi needs shortest-angle lerp
-            float Aamp = Mathf.Lerp(da.z, db.z, alpha);
-            float S = Mathf.Lerp(da.w, db.w, alpha);
-            float WL = Mathf.Lerp(wa.x, wb.x, alpha);
-            float omg = Mathf.Lerp(wa.y, wb.y, alpha);
-            float phiA = wa.z;
-            float phiB = wb.z;
-            float phiL = LerpAngleRad(phiA, phiB, alpha);
-
-            dir_amp_steep[i] = new Vector4(D_l.x, D_l.y, Aamp, S);
-            wl_omega_phi[i] = new Vector4(Mathf.Max(0.001f, WL), omg, phiL, 0f);
-
-            float k = 2f * Mathf.PI / Mathf.Max(0.001f, WL);
-            cpu[i] = new WaveCPU { A = Aamp, k = k, w = omg, S = S, D = D_l, phi = phiL };
-        }
-
-        // Copy into fixed-size scratch arrays and push to material
-        Array.Clear(_dirTmp, 0, MAX_WAVES);
-        Array.Clear(_wlTmp, 0, MAX_WAVES);
+        // Copy into fixed-size arrays
+        System.Array.Clear(_dirTmp, 0, MAX_WAVES);
+        System.Array.Clear(_wlTmp, 0, MAX_WAVES);
         if (count > 0)
         {
-            Array.Copy(dir_amp_steep, _dirTmp, count);
-            Array.Copy(wl_omega_phi, _wlTmp, count);
+            System.Array.Copy(dir_amp_steep, _dirTmp, count);
+            System.Array.Copy(wl_omega_phi, _wlTmp, count);
         }
 
+        // Push to material
         oceanMaterial?.SetVectorArray("_DirAmpSteep", _dirTmp);
         oceanMaterial?.SetVectorArray("_WlOmegaPad", _wlTmp); // z = phi
         oceanMaterial?.SetInt("_WaveCount", count);
         oceanMaterial?.SetVector("_OceanOrigin", transform.position);
 
-        // Apply to CPU sampler
+        // CPU sampler
         _cpuWaves = cpu;
     }
 
-    // Hash-based deterministic "random" in [0,1)
+    // ===== Baking (naturalization + optional pairwise interactions) =====
     static float Rand01(int key)
     {
         unchecked
         {
             uint x = (uint)key;
             x ^= x << 13; x ^= x >> 17; x ^= x << 5;
-            return (x & 0xFFFFFF) / 16777216f; // 24-bit mantissa
+            return (x & 0xFFFFFF) / 16777216f;
         }
     }
     static float RandSigned(int key) => Rand01(key) * 2f - 1f;
-
-    float LerpAngleRad(float a, float b, float t)
-    {
-        float delta = Mathf.Repeat((b - a) + Mathf.PI, 2f * Mathf.PI) - Mathf.PI;
-        return a + delta * t;
-    }
 
     void BakeFromAsset(OceanWaveSettings asset,
         out int count, out Vector4[] dir_amp_steep, out Vector4[] wl_omega_phi, out WaveCPU[] cpu, out float assetChop, int seed)
@@ -346,57 +231,55 @@ public class Ocean : MonoBehaviour
         assetChop = (asset ? asset.choppiness : 1f);
         var waves = (asset && asset.waves != null) ? asset.waves : Array.Empty<OceanWaveSettings.Wave>();
 
-        // Precompute weights for splitting
-        float[] weights = componentsPerWave == 3 ? new float[] { 0.5f, 0.3f, 0.2f }
-                          : componentsPerWave == 2 ? new float[] { 0.6f, 0.4f }
-                                                   : new float[] { 1f };
+        int splits = naturalize ? Mathf.Clamp(componentsPerWave, 1, 3) : 1;
+        float[] weights = splits == 3 ? new float[] { 0.5f, 0.3f, 0.2f }
+                        : splits == 2 ? new float[] { 0.6f, 0.4f }
+                                      : new float[] { 1f };
 
-        var dirList = new List<Vector4>(Mathf.Min(waves.Length * Mathf.Max(1, componentsPerWave), MAX_WAVES));
+        // Jitter toggles
+        float dirSpread = naturalize ? directionSpreadDeg : 0f;
+        float ampJit = naturalize ? amplitudeJitter : 0f;
+        float wlJit = naturalize ? wavelengthJitter : 0f;
+        float omgJit = naturalize ? omegaJitter : 0f;
+
+        var dirList = new List<Vector4>(Mathf.Min(waves.Length * splits, MAX_WAVES));
         var wlList = new List<Vector4>(dirList.Capacity);
         var cpuList = new List<WaveCPU>(dirList.Capacity);
 
-        // Generate base/naturalized components
         for (int i = 0; i < waves.Length; i++)
         {
             var wv = waves[i];
 
-            // Base direction (unit)
             float theta = wv.directionDegrees * Mathf.Deg2Rad;
             Vector2 Dbase = new Vector2(Mathf.Cos(theta), Mathf.Sin(theta)).normalized;
 
-            for (int s = 0; s < Mathf.Max(1, componentsPerWave); s++)
+            for (int s = 0; s < splits; s++)
             {
                 if (dirList.Count >= MAX_WAVES) break;
 
-                // Deterministic keys
                 int key = seed ^ (i * 73856093) ^ (s * 19349663);
 
-                // Spread angle
                 float spreadSign = Mathf.Sign(RandSigned(key + 11));
-                float spread = directionSpreadDeg * Mathf.Abs(RandSigned(key + 23)); // 0..dirSpread
+                float spread = dirSpread * Mathf.Abs(RandSigned(key + 23));
                 float angle = (spread * spreadSign) * Mathf.Deg2Rad;
 
-                // Rotated direction
                 float ca = Mathf.Cos(angle), sa = Mathf.Sin(angle);
                 Vector2 D = new Vector2(Dbase.x * ca - Dbase.y * sa, Dbase.x * sa + Dbase.y * ca).normalized;
 
-                // Jitters
-                float ampJ = 1f + amplitudeJitter * RandSigned(key + 101);
-                float wlJ = 1f + wavelengthJitter * RandSigned(key + 202);
-                float omgJ = 1f + omegaJitter * RandSigned(key + 303);
+                float ampMul = 1f + ampJit * RandSigned(key + 101);
+                float wlMul = 1f + wlJit * RandSigned(key + 202);
+                float omgMul = 1f + omgJit * RandSigned(key + 303);
 
                 float share = weights[Mathf.Min(s, weights.Length - 1)];
-                float A = wv.amplitude * share * ampJ;
-                float WL = Mathf.Max(0.001f, wv.wavelength * wlJ);
+                float A = wv.amplitude * share * ampMul;
+                float WL = Mathf.Max(0.001f, wv.wavelength * wlMul);
 
                 float k = 2f * Mathf.PI / WL;
                 float omg = (wv.speed > 0f) ? k * wv.speed : Mathf.Sqrt(gravity * k);
-                omg *= omgJ; // de-sync repetition slightly
+                omg *= omgMul;
 
-                // Effective steepness includes multipliers
                 float S_eff = wv.steepness * choppiness * assetChop;
 
-                // Random initial phase 0..2pi
                 float phi = Rand01(key + 404) * Mathf.PI * 2f;
 
                 dirList.Add(new Vector4(D.x, D.y, A, S_eff));
@@ -405,42 +288,32 @@ public class Ocean : MonoBehaviour
             }
         }
 
-        // Add pairwise interaction components (sum & difference), capped
+        // Pairwise interactions (optional)
         if (enableInteractions && dirList.Count < MAX_WAVES && maxInteractionComponents > 0)
         {
             int n = dirList.Count;
             int added = 0;
 
-            // Precompute k-vectors and omegas for existing comps
             Vector2[] kvec = new Vector2[n];
             float[] omg = new float[n];
             float[] Aamp = new float[n];
             float[] phi = new float[n];
-            Vector2[] Ddir = new Vector2[n];
-            float[] WL = new float[n];
             for (int i = 0; i < n; i++)
             {
                 Vector4 dir = dirList[i];
                 Vector4 wl = wlList[i];
                 Vector2 D = new Vector2(dir.x, dir.y);
                 float k = 2f * Mathf.PI / Mathf.Max(0.001f, wl.x);
-                kvec[i] = D * k;
-                omg[i] = wl.y;
-                Aamp[i] = dir.z;
-                phi[i] = wl.z;
-                Ddir[i] = D;
-                WL[i] = wl.x;
+                kvec[i] = D * k; omg[i] = wl.y; Aamp[i] = dir.z; phi[i] = wl.z;
             }
 
             for (int i = 0; i < n && added < maxInteractionComponents && dirList.Count < MAX_WAVES; i++)
                 for (int j = i + 1; j < n && added < maxInteractionComponents && dirList.Count < MAX_WAVES; j++)
                 {
-                    // sum
                     TryAddInteraction(kvec[i] + kvec[j], omg[i] + omg[j], Aamp[i], Aamp[j], phi[i] + phi[j],
                                       dirList, wlList, cpuList, ref added);
                     if (added >= maxInteractionComponents || dirList.Count >= MAX_WAVES) break;
 
-                    // difference
                     TryAddInteraction(kvec[i] - kvec[j], Mathf.Abs(omg[i] - omg[j]), Aamp[i], Aamp[j], phi[i] - phi[j],
                                       dirList, wlList, cpuList, ref added);
                 }
@@ -462,12 +335,10 @@ public class Ocean : MonoBehaviour
         Vector2 D = kvec / kmag;
         float WL = 2f * Mathf.PI / kmag;
 
-        // Small amplitude from product
         float A = interactionStrength * 0.5f * (Ai * Aj);
         if (A <= 1e-4f) return;
 
-        // Use a conservative steepness (avoid self-intersection)
-        float S_eff = 0.5f; // moderate
+        float S_eff = 0.5f; // conservative
         float k = kmag;
 
         dirList.Add(new Vector4(D.x, D.y, A, S_eff));
@@ -476,7 +347,7 @@ public class Ocean : MonoBehaviour
         added++;
     }
 
-    // ===== Push per-frame props =====
+    // ===== Per-frame uniforms =====
     void UpdateMaterialProps(float tSeconds)
     {
         oceanMaterial?.SetFloat("_TimeSeconds", tSeconds);
@@ -594,14 +465,9 @@ public class Ocean : MonoBehaviour
             dPdZ.z += -QA * w.D.y * dzp * s;
         }
 
-        normal = Vector3.Normalize(Vector3.Cross(dPdZ, dPdX));                 // up on flat patch
-        height = _instance.transform.position.y + disp.y;                       // world height
+        normal = Vector3.Normalize(Vector3.Cross(dPdZ, dPdX)); // up on flat patch
+        height = _instance.transform.position.y + disp.y;      // world height
     }
-
-#if UNITY_EDITOR
-    [ContextMenu("Regenerate Ocean Mesh")]
-    void RegenerateMeshContext() => EnsureMesh();
-#endif
 }
 
 static class OceanVecExt

@@ -16,7 +16,7 @@ Material:
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 0
   m_DoubleSidedGI: 0
-  m_CustomRenderQueue: -1
+  m_CustomRenderQueue: 2000
   stringTagMap: {}
   disabledShaderPasses: []
   m_LockedProperties: 
@@ -45,18 +45,18 @@ Material:
     - _AlphaFresnel: 0.231
     - _FoamAmount: 1.77
     - _FoamCurvAmt: 2
-    - _FoamEnabled: 1
-    - _FoamHeightBias: 0.498
-    - _FoamSharp: 0.77
-    - _FresnelBoost: 0.55
-    - _FresnelPower: 4.96
+    - _FoamEnabled: 0.589
+    - _FoamHeightBias: 0.558
+    - _FoamSharp: 0.5
+    - _FresnelBoost: 0.31
+    - _FresnelPower: 7.19
     - _HeightRange: 14.81
-    - _NormalAStr: 0.32
-    - _NormalBStr: 0.47
+    - _NormalAStr: 0.64
+    - _NormalBStr: 1.16
     - _NormalFadeEnd: 120
     - _NormalFadeStart: 15
     - _NormalSlopeAtten: 0.637
-    - _NormalStrength: 0.444
+    - _NormalStrength: 0.789
     - _NormalViewAtten: 0.695
     - _RampShift: 0.086
     - _RampSoftness: 0.399
@@ -64,8 +64,8 @@ Material:
     - _SandSaturation: 1
     - _SandStrength: 0.208
     - _SeaLevel: 0
-    - _Smoothness: 0.059
-    - _SpecularStrength: 0.05
+    - _Smoothness: 1
+    - _SpecularStrength: 0.06
     - _Transparency: 1
     - _WakeFoamStrength: 0.17
     - _WakeNormalStrength: 0.149
@@ -82,9 +82,9 @@ Material:
     - _JadeColor: {r: 0.02, g: 0.4699999, b: 0.5, a: 1}
     - _MidColor: {r: 0.059999965, g: 0.34999996, b: 0.54999995, a: 1}
     - _MintColor: {r: 0.6399999, g: 0.93, b: 0.9, a: 1}
-    - _NormalASpeed: {r: 0.03, g: 0.01, b: 0, a: 0}
+    - _NormalASpeed: {r: 0, g: 0, b: 0, a: 0}
     - _NormalATiling: {r: 0.08, g: 0.08, b: 0, a: 0}
-    - _NormalBSpeed: {r: -0.02, g: 0, b: 0, a: 0}
+    - _NormalBSpeed: {r: 0, g: 0, b: 0, a: 0}
     - _NormalBTiling: {r: 0.24, g: 0.24, b: 0, a: 0}
     - _RimColor: {r: 0.8, g: 0.96999997, b: 1, a: 1}
     - _SandColor: {r: 0.86, g: 0.88, b: 0.8399999, a: 1}

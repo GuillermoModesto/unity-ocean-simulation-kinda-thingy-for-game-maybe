@@ -13,25 +13,45 @@ MonoBehaviour:
   m_Name: OceanWavesSettings
   m_EditorClassIdentifier: 
   uvOffset: {x: 0, y: 0}
-  choppiness: 1
+  choppiness: 0.9
   waves:
-  - amplitude: 1.98
-    steepness: 1
-    wavelength: 32.6
+  - amplitude: 0.6
+    steepness: 0.5
+    wavelength: 80
     speed: 0
-    directionDegrees: 0
-  - amplitude: 0.99
-    steepness: 1
-    wavelength: 9.45
-    speed: 10.42
-    directionDegrees: 30
-  - amplitude: 0.47
-    steepness: 0
+    directionDegrees: 45
+  - amplitude: 0.4
+    steepness: 0.45
+    wavelength: 60
+    speed: 0
+    directionDegrees: 50
+  - amplitude: 0.3
+    steepness: 0.4
+    wavelength: 40
+    speed: 0
+    directionDegrees: 60
+  - amplitude: 0.25
+    steepness: 0.35
+    wavelength: 70
+    speed: 0
+    directionDegrees: 110
+  - amplitude: 0.18
+    steepness: 0.5
+    wavelength: 18
+    speed: 0
+    directionDegrees: 55
+  - amplitude: 0.12
+    steepness: 0.55
+    wavelength: 12
+    speed: 0
+    directionDegrees: 35
+  - amplitude: 0.08
+    steepness: 0.6
+    wavelength: 8
+    speed: 0
+    directionDegrees: 80
+  - amplitude: 0.06
+    steepness: 0.6
     wavelength: 6
     speed: 0
-    directionDegrees: 75
-  - amplitude: 0.2
-    steepness: 0.45
-    wavelength: 24
-    speed: 0
-    directionDegrees: 0
+    directionDegrees: 320
