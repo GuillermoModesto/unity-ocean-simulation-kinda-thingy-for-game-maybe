@@ -46,12 +46,12 @@ MonoBehaviour:
     speed: 0
     directionDegrees: 35
   - amplitude: 0.08
-    steepness: 0.6
+    steepness: 0.7
     wavelength: 8
-    speed: 0
+    speed: 5
     directionDegrees: 80
   - amplitude: 0.06
-    steepness: 0.6
+    steepness: 0.9
     wavelength: 6
-    speed: 0
+    speed: 8
     directionDegrees: 320
