@@ -654,7 +654,7 @@ PrefabInstance:
       insertIndex: -1
       addedObject: {fileID: 1670754752}
   m_SourcePrefab: {fileID: 100100000, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
---- !u!114 &1574084194
+--- !u!114 &1509710884
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -669,46 +669,46 @@ MonoBehaviour:
   uvOffset: {x: 0, y: 0}
   choppiness: 0.9
   waves:
-  - amplitude: 1.0200001
-    steepness: 1.215
+  - amplitude: 0.6
+    steepness: 0.5
     wavelength: 80
     speed: 0
-    directionDegrees: 34.5
-  - amplitude: 0.68
-    steepness: 1.0935
+    directionDegrees: 45
+  - amplitude: 0.4
+    steepness: 0.45
     wavelength: 60
     speed: 0
-    directionDegrees: 39.5
-  - amplitude: 0.51000005
-    steepness: 0.97200006
+    directionDegrees: 50
+  - amplitude: 0.3
+    steepness: 0.4
     wavelength: 40
     speed: 0
-    directionDegrees: 49.5
-  - amplitude: 0.425
-    steepness: 0.8505
+    directionDegrees: 60
+  - amplitude: 0.25
+    steepness: 0.35
     wavelength: 70
     speed: 0
-    directionDegrees: 99.5
-  - amplitude: 0.30600002
-    steepness: 1.215
+    directionDegrees: 110
+  - amplitude: 0.18
+    steepness: 0.5
     wavelength: 18
     speed: 0
-    directionDegrees: 44.5
-  - amplitude: 0.204
-    steepness: 1.3365
+    directionDegrees: 55
+  - amplitude: 0.12
+    steepness: 0.55
     wavelength: 12
     speed: 0
-    directionDegrees: 24.5
-  - amplitude: 0.136
-    steepness: 1.701
+    directionDegrees: 35
+  - amplitude: 0.08
+    steepness: 0.7
     wavelength: 8
     speed: 5
-    directionDegrees: 69.5
-  - amplitude: 0.102
-    steepness: 2.187
+    directionDegrees: 80
+  - amplitude: 0.06
+    steepness: 0.9
     wavelength: 6
     speed: 8
-    directionDegrees: 330.5
+    directionDegrees: 320
 --- !u!1 &1670754745 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 1320253696054395029, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
@@ -807,7 +807,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3555e9eae4db34747b52c22d7ef04ff7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  settings: {fileID: 1574084194}
+  settings: {fileID: 1509710884}
   oceanMaterial: {fileID: 2100000, guid: 9ce73567e04e7da4aa9f2162f7160a86, type: 2}
   gravity: 9.81
   patchPreset: 3
@@ -821,8 +821,8 @@ MonoBehaviour:
   lodFollowTarget: {fileID: 1670754751}
   followCamera: {fileID: 961739752}
   choppiness: 0.98571426
-  storminess: 0.101
-  stormAmplitudeAt1: 7
+  storminess: 0.778
+  stormAmplitudeAt1: 9
   stormSteepnessAt1: 0.2
   swellWaveBoostAt1: 1.5
   swellWaveBoostPower: 1.2
@@ -919,7 +919,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   ocean: {fileID: 1862072624}
   baseSettings: {fileID: 11400000, guid: 137f2307f2659ba40a537fc21db83536, type: 2}
-  windLevel: 1
+  windLevel: 0
   windDirection: {x: 1, y: 0, z: 0}
   lambdaCutoffShort: 3
   maxDirLockDeg: 35
