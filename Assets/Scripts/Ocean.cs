@@ -1,6 +1,6 @@
 ﻿// Ocean.cs — single settings asset + Storminess slider (physically safe).
 // Keeps: naturalized Gerstner waves, optional interactions, fixed-size shader arrays,
-// transparency=1 → opaque, CPU sampling, camera-centered mesh.
+// transparency=1 → opaque, CPU sampling, and now: camera-centered LOD rings (no jobs/burst).
 
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -18,10 +18,40 @@ public class Ocean : MonoBehaviour
     [Tooltip("Gravity used for deep-water dispersion (omega = sqrt(g*k)) when wave speed is 0.")]
     public float gravity = 9.81f;
 
-    [Header("Mesh (camera-centered grid)")]
-    [Min(4)] public int xVerts = 256;
-    [Min(4)] public int zVerts = 256;
-    [Min(0.01f)] public float spacing = 2f;
+    // ───────────────────────────────────────────────────────────────────────────
+    // LOD MESH (camera-centered inner patch + rings)
+    // ───────────────────────────────────────────────────────────────────────────
+    [Header("LOD Mesh (camera-centered)")]
+    [Tooltip("Meters across the inner high-resolution square.")]
+    [Min(1f)] public float innerSize = 200f;
+
+    [Tooltip("Quads per side in the inner square (verts = quads+1).")]
+    [Min(1)] public int innerResolution = 100;
+
+    [Tooltip("Ring widths (meters) added around the inner square (top/bottom/left/right strips per ring).")]
+    public float[] ringWidths = { 40f, 60f, 90f, 140f, 220f };
+
+    [Tooltip("Resolution (quads) along the long axis for each ring. Array length must match ringWidths.")]
+    public int[] ringRes = { 64, 48, 32, 24, 16 };
+
+    [Tooltip("If >1, fixed cells across a ring strip; if 1, thickness derived from targetCellSize.")]
+    [Range(1, 6)] public int ringThicknessCells = 1;
+
+    [Tooltip("Meters per cell when ringThicknessCells == 1.")]
+    [Min(0.1f)] public float targetCellSize = 8f;
+
+    [Header("LOD Rebuild")]
+    [Tooltip("If true, rebuild/center the mesh as the camera moves.")]
+    public bool rebuildAtRuntime = true;
+
+    [Tooltip("Minimum camera move before we rebuild/center (snapped by inner cell size).")]
+    [Min(0.01f)] public float rebuildDistanceThreshold = 10f;
+
+    [Tooltip("Rebuild when any LOD parameter changes in the inspector.")]
+    public bool rebuildOnParamChange = true;
+
+    [Tooltip("If null, Camera.main is used.")]
+    public Camera followCamera;
 
     [Header("Choppiness")]
     [Tooltip("Global choppiness multiplier (scales steepness for both GPU & CPU).")]
@@ -34,19 +64,18 @@ public class Ocean : MonoBehaviour
     public float storminess = 0f;
 
     [Tooltip("Amplitude multiplier when Storminess = 1. Larger = much taller waves at full storm.")]
-    [Min(1f)] public float stormAmplitudeAt1 = 12f;   // was 10f
+    [Min(1f)] public float stormAmplitudeAt1 = 12f;
 
     [Tooltip("Steepness multiplier when Storminess = 1. Use <1 to make storm waves less sharp.")]
-    [Range(0.2f, 2f)] public float stormSteepnessAt1 = 0.6f; // was Min(1) and typically >1
+    [Range(0.2f, 2f)] public float stormSteepnessAt1 = 0.6f;
 
     [Header("Storminess shaping")]
-    [Tooltip("Extra boost for long wavelengths at storms (rougher 'octaves'). 1 = off.")]
+    [Tooltip("Extra boost for long wavelengths at storms (1 = off).")]
     [Min(1f)] public float swellWaveBoostAt1 = 2.0f;
 
     [Tooltip("How strongly the boost prefers long waves (0.3 subtle ←→ 1.0 aggressive).")]
     [Range(0.2f, 1.2f)] public float swellWaveBoostPower = 0.7f;
     // -------------------------------------------------------------------
-
 
     [Header("Natural Variation")]
     [Tooltip("Enable extra realism: split each wave into several components with slight dir/freq/phase differences.")]
@@ -76,7 +105,7 @@ public class Ocean : MonoBehaviour
     // ===== Internals =====
     private const int MAX_WAVES = 32;                   // Keep in sync with shader
     private Vector4[] _dirTmp = new Vector4[MAX_WAVES]; // (Dx, Dz, A, S)
-    private Vector4[] _wlTmp = new Vector4[MAX_WAVES]; // (WL, omega, phi, _)
+    private Vector4[] _wlTmp = new Vector4[MAX_WAVES];  // (WL, omega, phi, _)
     private bool _arraysPrimed = false;
 
     private struct WaveCPU
@@ -94,6 +123,14 @@ public class Ocean : MonoBehaviour
     // track live changes
     private float _lastStorminess = -1f;
 
+    // LOD mesh state/buffers
+    Vector3[] _verts;
+    Vector2[] _uvs;
+    int[] _tris;
+    Vector3 _lastCenter;
+    float _lastInnerSize;
+    int _lastInnerRes, _lastWidthHash, _lastResHash;
+
     // ===== Unity lifecycle =====
     void OnEnable()
     {
@@ -106,6 +143,7 @@ public class Ocean : MonoBehaviour
         ResubscribeSettings(settings);
 
         EnsureMesh();
+        RegenerateLODMesh();                     // build the LOD mesh once
         RecomputeAndApplyEffectiveWaves();
         UpdateMaterialProps(GetTimeSeconds());
         AdjustRenderQueueForTransparency();
@@ -129,6 +167,7 @@ public class Ocean : MonoBehaviour
             ResubscribeSettings(settings);
 
         EnsureMesh();
+        RegenerateLODMesh();
         RecomputeAndApplyEffectiveWaves();
         UpdateMaterialProps(GetTimeSeconds());
         AdjustRenderQueueForTransparency();
@@ -160,6 +199,9 @@ public class Ocean : MonoBehaviour
             _lastStorminess = storminess;
             RecomputeAndApplyEffectiveWaves();
         }
+
+        if (rebuildAtRuntime && ShouldRebuildLOD())
+            RegenerateLODMesh();
 
         UpdateMaterialProps(GetTimeSeconds());
         AdjustRenderQueueForTransparency();
@@ -281,7 +323,7 @@ public class Ocean : MonoBehaviour
         float wlJit = naturalize ? wavelengthJitter : 0f;
         float omgJit = naturalize ? omegaJitter : 0f;
 
-        // --- Scan wavelengths for normalization (so we can favor LONG swells)
+        // --- Scan wavelengths for normalization (favor LONG swells at storms)
         float minWL = float.MaxValue, maxWL = 0f;
         if (asset && asset.waves != null)
         {
@@ -343,7 +385,7 @@ public class Ocean : MonoBehaviour
 
                 float longBoost = Mathf.Lerp(
                     1f,
-                    swellWaveBoostAt1, // reusing this slider name; it now boosts long swells
+                    swellWaveBoostAt1,
                     Mathf.Pow(Mathf.Clamp01(storminess), 1f) * Mathf.Pow(long01, swellWaveBoostPower)
                 );
 
@@ -419,8 +461,6 @@ public class Ocean : MonoBehaviour
         cpu = cpuList.ToArray();
     }
 
-
-
     void TryAddInteraction(Vector2 kvec, float omega, float Ai, float Aj, float phi,
                            List<Vector4> dirList, List<Vector4> wlList, List<WaveCPU> cpuList, ref int added)
     {
@@ -450,76 +490,220 @@ public class Ocean : MonoBehaviour
         oceanMaterial?.SetVector("_OceanOrigin", transform.position);
     }
 
-    // ===== Mesh generation (CW, faces up) =====
+    // ───────────────────────────────────────────────────────────────────────────
+    // LOD mesh generation (center square + 4 strips per ring), no overlap
+    // ───────────────────────────────────────────────────────────────────────────
+
+    struct Patch
+    {
+        public float x0, x1, z0, z1; // local-space rect
+        public int cols, rows;       // quads along X/Z
+        public int vertBase;         // offsets into shared arrays
+    }
+
     void EnsureMesh()
     {
         var mf = GetComponent<MeshFilter>();
-        if (mf.sharedMesh != null)
+        if (mf.sharedMesh == null)
         {
-#if UNITY_EDITOR
-            DestroyImmediate(mf.sharedMesh);
-#else
-            Destroy(mf.sharedMesh);
-#endif
+            var mesh = new Mesh { name = "Ocean_LODMesh", indexFormat = IndexFormat.UInt32 };
+            mf.sharedMesh = mesh;
         }
-        mf.sharedMesh = GenerateGrid(xVerts, zVerts, spacing);
+        // do not rebuild here; RegenerateLODMesh handles (re)builds
+    }
+
+    bool ShouldRebuildLOD()
+    {
+        Vector3 center = GetSnappedCenter();
+        float moved = Vector3.Distance(center, _lastCenter);
+
+        bool movedEnough = moved >= Mathf.Max(0.5f * GetInnerCellSize(), rebuildDistanceThreshold);
+        bool paramsChanged = rebuildOnParamChange &&
+                             (innerResolution != _lastInnerRes ||
+                              !Mathf.Approximately(innerSize, _lastInnerSize) ||
+                              Hash(ringWidths) != _lastWidthHash ||
+                              Hash(ringRes) != _lastResHash);
+
+        return movedEnough || paramsChanged;
+    }
+
+    void RegenerateLODMesh()
+    {
+        var mf = GetComponent<MeshFilter>();
+        var mesh = mf.sharedMesh;
+        if (mesh == null) return;
+
+        // 1) Compute the snapped center in WORLD space (do NOT move transform)
+        Vector3 centerWorld = GetSnappedCenter();
+
+        // 2) Outer extents for UV normalization
+        float far = 0f; for (int i = 0; i < ringWidths.Length; i++) far += Mathf.Max(0f, ringWidths[i]);
+        float halfInner = innerSize * 0.5f;
+        float areaSize = Mathf.Max(innerSize, (halfInner + far) * 2f);
+
+        // 3) Build patch descriptors in WORLD space (we'll convert to LOCAL when writing verts)
+        var patches = new List<Patch>();
+
+        float minXw = centerWorld.x - halfInner;
+        float maxXw = centerWorld.x + halfInner;
+        float minZw = centerWorld.z - halfInner;
+        float maxZw = centerWorld.z + halfInner;
+
+        int H = Mathf.Max(1, innerResolution);
+        patches.Add(new Patch { x0 = minXw, x1 = maxXw, z0 = minZw, z1 = maxZw, cols = H, rows = H });
+
+        float prevMinX = minXw, prevMaxX = maxXw, prevMinZ = minZw, prevMaxZ = maxZw;
+        int ringCount = Mathf.Min(ringWidths.Length, ringRes.Length);
+
+        for (int r = 0; r < ringCount; r++)
+        {
+            float w = Mathf.Max(0.01f, ringWidths[r]);
+            int R = Mathf.Max(1, ringRes[r]);
+
+            float newMinX = prevMinX - w, newMaxX = prevMaxX + w;
+            float newMinZ = prevMinZ - w, newMaxZ = prevMaxZ + w;
+
+            int rowsAcross = (ringThicknessCells > 1)
+                ? ringThicknessCells
+                : Mathf.Max(1, Mathf.RoundToInt(w / Mathf.Max(1f, targetCellSize)));
+
+            // top strip
+            patches.Add(new Patch { x0 = newMinX, x1 = newMaxX, z0 = prevMaxZ, z1 = newMaxZ, cols = R, rows = rowsAcross });
+            // bottom strip
+            patches.Add(new Patch { x0 = newMinX, x1 = newMaxX, z0 = newMinZ, z1 = prevMinZ, cols = R, rows = rowsAcross });
+            // left strip (long axis Z)
+            patches.Add(new Patch { x0 = newMinX, x1 = prevMinX, z0 = prevMinZ, z1 = prevMaxZ, cols = rowsAcross, rows = R });
+            // right strip
+            patches.Add(new Patch { x0 = prevMaxX, x1 = newMaxX, z0 = prevMinZ, z1 = prevMaxZ, cols = rowsAcross, rows = R });
+
+            prevMinX = newMinX; prevMaxX = newMaxX;
+            prevMinZ = newMinZ; prevMaxZ = newMaxZ;
+        }
+
+        // 4) Offsets + counts
+        int totalVerts = 0, totalTris = 0;
+        for (int p = 0; p < patches.Count; p++)
+        {
+            var patch = patches[p];
+            patch.vertBase = totalVerts;
+            patches[p] = patch;
+
+            int vPer = (patch.cols + 1) * (patch.rows + 1);
+            int tPer = patch.cols * patch.rows * 6;
+            totalVerts += vPer;
+            totalTris += tPer;
+        }
+
+        if (_verts == null || _verts.Length != totalVerts) _verts = new Vector3[totalVerts];
+        if (_uvs == null || _uvs.Length != totalVerts) _uvs = new Vector2[totalVerts];
+        if (_tris == null || _tris.Length != totalTris) _tris = new int[totalTris];
+
+        // 5) Fill verts (LOCAL) + UVs (stable across rebuilds)
+        //    - World -> Local: subtract transform.position
+        Vector3 origin = transform.position;
+
+        for (int p = 0; p < patches.Count; p++)
+        {
+            var patch = patches[p];
+            int vCols = patch.cols + 1;
+            int vRows = patch.rows + 1;
+
+            int dst = patch.vertBase;
+            for (int j = 0; j < vRows; j++)
+            {
+                float fz = (patch.rows == 0) ? 0f : (float)j / patch.rows;
+                float zw = Mathf.Lerp(patch.z0, patch.z1, fz);     // WORLD Z
+
+                for (int i = 0; i < vCols; i++)
+                {
+                    float fx = (patch.cols == 0) ? 0f : (float)i / patch.cols;
+                    float xw = Mathf.Lerp(patch.x0, patch.x1, fx); // WORLD X
+
+                    float xl = xw - origin.x; // LOCAL X
+                    float zl = zw - origin.z; // LOCAL Z
+
+                    _verts[dst] = new Vector3(xl, 0f, zl);
+
+                    // UVs anchored to the current center to avoid precision drift
+                    // (use world coords so they don't depend on transform)
+                    _uvs[dst] = new Vector2(
+                        (xw - centerWorld.x + areaSize * 0.5f) / areaSize,
+                        (zw - centerWorld.z + areaSize * 0.5f) / areaSize
+                    );
+
+                    dst++;
+                }
+            }
+        }
+
+        // 6) Fill triangles
+        int t = 0;
+        for (int p = 0; p < patches.Count; p++)
+        {
+            var patch = patches[p];
+            int baseV = patch.vertBase;
+            int cols = patch.cols, rows = patch.rows;
+            int stride = cols + 1;
+
+            for (int j = 0; j < rows; j++)
+            {
+                for (int i = 0; i < cols; i++)
+                {
+                    int a = baseV + j * stride + i;
+                    int b = a + 1;
+                    int c = a + stride;
+                    int d = c + 1;
+
+                    _tris[t++] = a; _tris[t++] = d; _tris[t++] = b;
+                    _tris[t++] = a; _tris[t++] = c; _tris[t++] = d;
+                }
+            }
+        }
+
+        // 7) Push to mesh
+        mesh.Clear();
+        mesh.indexFormat = IndexFormat.UInt32;
+        mesh.SetVertices(_verts);
+        mesh.SetUVs(0, _uvs);
+        mesh.SetTriangles(_tris, 0);
+
+        // Huge bounds so GPU displacement isn't culled
+        mesh.bounds = new Bounds(Vector3.zero, Vector3.one * 100000f);
+
+        // 8) Remember state (in WORLD space)
+        _lastCenter = centerWorld;
+        _lastInnerSize = innerSize;
+        _lastInnerRes = innerResolution;
+        _lastWidthHash = Hash(ringWidths);
+        _lastResHash = Hash(ringRes);
     }
 
 
-    Mesh GenerateGrid(int xVerts, int zVerts, float spacing)
+    float GetInnerCellSize()
     {
-        var mesh = new Mesh { name = "OceanGrid_CW" };
+        int H = Mathf.Max(1, innerResolution);
+        return innerSize / H;
+    }
 
-        int vCount = xVerts * zVerts;
+    Vector3 GetSnappedCenter()
+    {
+        var cam = followCamera ? followCamera : Camera.main;
+        Vector3 camPos = cam ? cam.transform.position : transform.position;
+        float cell = GetInnerCellSize();
+        float x = Mathf.Round(camPos.x / cell) * cell;
+        float z = Mathf.Round(camPos.z / cell) * cell;
+        return new Vector3(x, transform.position.y, z);
+    }
 
-        // 1) Prevent 16-bit index overflow on big grids
-        mesh.indexFormat = (vCount > 65535) ? IndexFormat.UInt32 : IndexFormat.UInt16;
-
-        var verts = new Vector3[vCount];
-        var uv = new Vector2[vCount];
-        var idx = new int[(xVerts - 1) * (zVerts - 1) * 6];
-
-        // 2) Correct centering (no half-cell drift)
-        float xCenter = (xVerts - 1) * 0.5f;
-        float zCenter = (zVerts - 1) * 0.5f;
-
-        for (int z = 0; z < zVerts; z++)
-        {
-            for (int x = 0; x < xVerts; x++)
-            {
-                int i = z * xVerts + x;
-                verts[i] = new Vector3((x - xCenter) * spacing, 0f, (z - zCenter) * spacing);
-                uv[i] = new Vector2((float)x / (xVerts - 1), (float)z / (zVerts - 1));
-            }
-        }
-
-        int t = 0;
-        for (int z = 0; z < zVerts - 1; z++)
-        {
-            for (int x = 0; x < xVerts - 1; x++)
-            {
-                int i = z * xVerts + x;
-
-                // Triangle 1 (i, i+X, i+1)
-                idx[t++] = i;
-                idx[t++] = i + xVerts;
-                idx[t++] = i + 1;
-
-                // Triangle 2 (i+1, i+X, i+X+1)
-                idx[t++] = i + 1;
-                idx[t++] = i + xVerts;
-                idx[t++] = i + xVerts + 1;
-            }
-        }
-
-        mesh.vertices = verts;
-        mesh.uv = uv;
-        mesh.triangles = idx;
-
-        mesh.RecalculateBounds();
-        // Huge bounds so waves aren’t culled as they displace
-        mesh.bounds = new Bounds(Vector3.zero, Vector3.one * 100000f);
-        return mesh;
+    static int Hash(int[] arr)
+    {
+        if (arr == null) return 0;
+        unchecked { int h = 17; for (int i = 0; i < arr.Length; i++) h = h * 31 + arr[i]; return h; }
+    }
+    static int Hash(float[] arr)
+    {
+        if (arr == null) return 0;
+        unchecked { int h = 17; for (int i = 0; i < arr.Length; i++) h = h * 31 + Mathf.RoundToInt(arr[i] * 1000f); return h; }
     }
 
     // ===== Time helper (edit + play) =====
@@ -551,7 +735,7 @@ public class Ocean : MonoBehaviour
             {
                 var w = waves[i];
                 float dot = w.D.x * x0.x + w.D.y * x0.y;
-                float phase = w.k * dot - w.w * t + w.phi;   // phi included (matches shader fix)
+                float phase = w.k * dot - w.w * t + w.phi;   // phi included (matches shader)
                 float c = Mathf.Cos(phase);
                 float QA = w.S * w.A;
                 dispH.x += QA * w.D.x * c;
@@ -597,8 +781,6 @@ public class Ocean : MonoBehaviour
         normal = Vector3.Normalize(Vector3.Cross(dPdZ, dPdX));
         height = _instance.transform.position.y + disp.y;
     }
-
-
 }
 
 static class OceanVecExt
