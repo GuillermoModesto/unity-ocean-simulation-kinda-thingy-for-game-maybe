@@ -27,19 +27,26 @@ public class Ocean : MonoBehaviour
     [Tooltip("Global choppiness multiplier (scales steepness for both GPU & CPU).")]
     public float choppiness = 1f;
 
-    // ---- NEW: Storminess ----------------------------------------------------
+    // ---- Storminess ----------------------------------------------------
     [Header("Storminess (0 = calm / 1 = storm)")]
     [Range(0f, 1f)]
     [Tooltip("Scales amplitudes (wave height) and steepness with stability enforcement (S·k·A < 1).")]
     public float storminess = 0f;
 
-    [Tooltip("Amplitude multiplier when Storminess = 1. A=H/2, so 4.5 ≈ height ×4.5 (e.g., ~1–2 m → ~5–12 m).")]
-    [Min(1f)] public float stormAmplitudeAt1 = 10f;
+    [Tooltip("Amplitude multiplier when Storminess = 1. Larger = much taller waves at full storm.")]
+    [Min(1f)] public float stormAmplitudeAt1 = 12f;   // was 10f
 
-    [Tooltip("Steepness multiplier when Storminess = 1 (moderate; clamped by stability rule).")]
-    [Min(1f)] public float stormSteepnessAt1 = 2.5f;
+    [Tooltip("Steepness multiplier when Storminess = 1. Use <1 to make storm waves less sharp.")]
+    [Range(0.2f, 2f)] public float stormSteepnessAt1 = 0.6f; // was Min(1) and typically >1
 
-    // ------------------------------------------------------------------------
+    [Header("Storminess shaping")]
+    [Tooltip("Extra boost for long wavelengths at storms (rougher 'octaves'). 1 = off.")]
+    [Min(1f)] public float swellWaveBoostAt1 = 2.0f;
+
+    [Tooltip("How strongly the boost prefers long waves (0.3 subtle ←→ 1.0 aggressive).")]
+    [Range(0.2f, 1.2f)] public float swellWaveBoostPower = 0.7f;
+    // -------------------------------------------------------------------
+
 
     [Header("Natural Variation")]
     [Tooltip("Enable extra realism: split each wave into several components with slight dir/freq/phase differences.")]
@@ -251,31 +258,44 @@ public class Ocean : MonoBehaviour
     }
     static float RandSigned(int key) => Rand01(key) * 2f - 1f;
 
-    void BakeFromAsset(OceanWaveSettings asset,
-        out int count, out Vector4[] dir_amp_steep, out Vector4[] wl_omega_phi, out WaveCPU[] cpu, out float assetChop, int seed)
+    void BakeFromAsset(
+    OceanWaveSettings asset,
+    out int count,
+    out Vector4[] dir_amp_steep,
+    out Vector4[] wl_omega_phi,
+    out WaveCPU[] cpu,
+    out float assetChop,
+    int seed)
     {
         assetChop = (asset ? asset.choppiness : 1f);
         var waves = (asset && asset.waves != null) ? asset.waves : Array.Empty<OceanWaveSettings.Wave>();
 
+        // --- Naturalization controls
         int splits = naturalize ? Mathf.Clamp(componentsPerWave, 1, 3) : 1;
         float[] weights = splits == 3 ? new float[] { 0.5f, 0.3f, 0.2f }
                         : splits == 2 ? new float[] { 0.6f, 0.4f }
                                       : new float[] { 1f };
 
-        // Effective jitter toggles
         float dirSpread = naturalize ? directionSpreadDeg : 0f;
         float ampJit = naturalize ? amplitudeJitter : 0f;
         float wlJit = naturalize ? wavelengthJitter : 0f;
         float omgJit = naturalize ? omegaJitter : 0f;
 
-        // Storm sliders -> multipliers
-        float ampMulMax = Mathf.Max(1f, stormAmplitudeAt1);
-        float steepMulMax = Mathf.Max(1f, stormSteepnessAt1);
-        float ampMul = Mathf.Lerp(1f, ampMulMax, Mathf.Clamp01(storminess));
-        float steepMul = Mathf.Lerp(1f, steepMulMax, Mathf.Clamp01(storminess));
+        // --- Scan wavelengths for normalization (so we can favor LONG swells)
+        float minWL = float.MaxValue, maxWL = 0f;
+        if (asset && asset.waves != null)
+        {
+            for (int i = 0; i < asset.waves.Length; i++)
+            {
+                float wl = Mathf.Max(0.001f, asset.waves[i].wavelength);
+                if (wl < minWL) minWL = wl;
+                if (wl > maxWL) maxWL = wl;
+            }
+        }
+        if (minWL > maxWL) { minWL = 1f; maxWL = 1f; } // fallback
 
-        var dirList = new List<Vector4>(Mathf.Min(waves.Length * splits, MAX_WAVES));
-        var wlList = new List<Vector4>(dirList.Capacity);
+        var dirList = new List<Vector4>(Mathf.Min(waves.Length * splits, MAX_WAVES)); // (Dx, Dz, A, S)
+        var wlList = new List<Vector4>(dirList.Capacity);                             // (WL, omega, phi, _)
         var cpuList = new List<WaveCPU>(dirList.Capacity);
 
         for (int i = 0; i < waves.Length; i++)
@@ -291,6 +311,7 @@ public class Ocean : MonoBehaviour
 
                 int key = seed ^ (i * 73856093) ^ (s * 19349663);
 
+                // --- Direction spread
                 float spreadSign = Mathf.Sign(RandSigned(key + 11));
                 float spread = dirSpread * Mathf.Abs(RandSigned(key + 23));
                 float angle = (spread * spreadSign) * Mathf.Deg2Rad;
@@ -298,42 +319,67 @@ public class Ocean : MonoBehaviour
                 float ca = Mathf.Cos(angle), sa = Mathf.Sin(angle);
                 Vector2 D = new Vector2(Dbase.x * ca - Dbase.y * sa, Dbase.x * sa + Dbase.y * ca).normalized;
 
+                // --- Per-split weights & jitters
+                float share = weights[Mathf.Min(s, weights.Length - 1)];
                 float ampMulJ = 1f + ampJit * RandSigned(key + 101);
                 float wlMul = 1f + wlJit * RandSigned(key + 202);
                 float omgMul = 1f + omgJit * RandSigned(key + 303);
 
-                float share = weights[Mathf.Min(s, weights.Length - 1)];
+                // ===== Amplitude (with storm shaping) =====
                 float A = wv.amplitude * share * ampMulJ;
 
-                // --- Storminess: grow amplitude ---
-                A *= ampMul;
-
+                // Jittered wavelength & wavenumber
                 float WL = Mathf.Max(0.001f, wv.wavelength * wlMul);
-
                 float k = 2f * Mathf.PI / WL;
-                float omg = (wv.speed > 0f) ? k * wv.speed : Mathf.Sqrt(gravity * k);
-                omg *= omgMul;
 
-                // Base steepness
+                // Global storm amplitude gain
+                float ampMulMax = Mathf.Max(1f, stormAmplitudeAt1);
+                float ampMul = Mathf.Lerp(1f, ampMulMax, Mathf.Clamp01(storminess));
+
+                // Long-swell boost at storms:
+                // long01 = 0 for shortest (WL == minWL), 1 for longest (WL == maxWL)
+                float long01 = (maxWL > minWL) ? Mathf.InverseLerp(minWL, maxWL, WL) : 0f;
+                float small01 = 1f - long01; // 1 for shortest waves, 0 for longest
+
+                float longBoost = Mathf.Lerp(
+                    1f,
+                    swellWaveBoostAt1, // reusing this slider name; it now boosts long swells
+                    Mathf.Pow(Mathf.Clamp01(storminess), 1f) * Mathf.Pow(long01, swellWaveBoostPower)
+                );
+
+                A *= (ampMul * longBoost);
+
+                // ===== Frequency (omega) =====
+                float omega = (wv.speed > 0f) ? (k * wv.speed) : Mathf.Sqrt(Mathf.Max(0.0f, gravity) * k);
+                omega *= omgMul;
+
+                // ===== Steepness (with storm rounding) =====
+                // Base from authored steepness, global choppiness, and asset choppiness
                 float S_eff = wv.steepness * choppiness * assetChop;
 
-                // --- Storminess: nudge steepness (clamped by S·k·A < 1) ---
-                S_eff *= steepMul;
+                // At high storm, reduce steepness to make waves rounder (stormSteepnessAt1 < 1 => less steep)
+                float steepMul = Mathf.Lerp(1f, Mathf.Max(0.01f, stormSteepnessAt1), Mathf.Clamp01(storminess));
 
-                // Stability clamp: keep S·k·A < 1 (with a little margin)
+                // Still damp SHORT waves a bit more at storm to avoid spiky crests
+                float steepDampShort = Mathf.Lerp(1f, 0.7f, small01 * Mathf.Clamp01(storminess));
+
+                S_eff *= (steepMul * steepDampShort);
+
+                // Stability clamp: keep S * k * A < 1 (with margin)
                 float limit = 0.95f / Mathf.Max(1e-6f, k * Mathf.Max(1e-6f, A));
                 if (S_eff > limit) S_eff = limit;
 
                 // Random initial phase 0..2π
                 float phi = Rand01(key + 404) * Mathf.PI * 2f;
 
+                // Output
                 dirList.Add(new Vector4(D.x, D.y, A, S_eff));
-                wlList.Add(new Vector4(WL, omg, phi, 0f));
-                cpuList.Add(new WaveCPU { A = A, k = k, w = omg, S = S_eff, D = D, phi = phi });
+                wlList.Add(new Vector4(WL, omega, phi, 0f));
+                cpuList.Add(new WaveCPU { A = A, k = k, w = omega, S = S_eff, D = D, phi = phi });
             }
         }
 
-        // Pairwise interactions (optional)
+        // ===== Optional pairwise interactions =====
         if (enableInteractions && dirList.Count < MAX_WAVES && maxInteractionComponents > 0)
         {
             int n = dirList.Count;
@@ -353,6 +399,7 @@ public class Ocean : MonoBehaviour
             }
 
             for (int i = 0; i < n && added < maxInteractionComponents && dirList.Count < MAX_WAVES; i++)
+            {
                 for (int j = i + 1; j < n && added < maxInteractionComponents && dirList.Count < MAX_WAVES; j++)
                 {
                     TryAddInteraction(kvec[i] + kvec[j], omg[i] + omg[j], Aamp[i], Aamp[j], phi[i] + phi[j],
@@ -362,13 +409,17 @@ public class Ocean : MonoBehaviour
                     TryAddInteraction(kvec[i] - kvec[j], Mathf.Abs(omg[i] - omg[j]), Aamp[i], Aamp[j], phi[i] - phi[j],
                                       dirList, wlList, cpuList, ref added);
                 }
+            }
         }
 
+        // ===== Outputs =====
         count = dirList.Count;
         dir_amp_steep = dirList.ToArray();
         wl_omega_phi = wlList.ToArray();
         cpu = cpuList.ToArray();
     }
+
+
 
     void TryAddInteraction(Vector2 kvec, float omega, float Ai, float Aj, float phi,
                            List<Vector4> dirList, List<Vector4> wlList, List<WaveCPU> cpuList, ref int added)
@@ -414,21 +465,30 @@ public class Ocean : MonoBehaviour
         mf.sharedMesh = GenerateGrid(xVerts, zVerts, spacing);
     }
 
+
     Mesh GenerateGrid(int xVerts, int zVerts, float spacing)
     {
         var mesh = new Mesh { name = "OceanGrid_CW" };
 
         int vCount = xVerts * zVerts;
+
+        // 1) Prevent 16-bit index overflow on big grids
+        mesh.indexFormat = (vCount > 65535) ? IndexFormat.UInt32 : IndexFormat.UInt16;
+
         var verts = new Vector3[vCount];
         var uv = new Vector2[vCount];
         var idx = new int[(xVerts - 1) * (zVerts - 1) * 6];
+
+        // 2) Correct centering (no half-cell drift)
+        float xCenter = (xVerts - 1) * 0.5f;
+        float zCenter = (zVerts - 1) * 0.5f;
 
         for (int z = 0; z < zVerts; z++)
         {
             for (int x = 0; x < xVerts; x++)
             {
                 int i = z * xVerts + x;
-                verts[i] = new Vector3((x - xVerts * 0.5f) * spacing, 0f, (z - zVerts * 0.5f) * spacing);
+                verts[i] = new Vector3((x - xCenter) * spacing, 0f, (z - zCenter) * spacing);
                 uv[i] = new Vector2((float)x / (xVerts - 1), (float)z / (zVerts - 1));
             }
         }
@@ -440,10 +500,12 @@ public class Ocean : MonoBehaviour
             {
                 int i = z * xVerts + x;
 
+                // Triangle 1 (i, i+X, i+1)
                 idx[t++] = i;
                 idx[t++] = i + xVerts;
                 idx[t++] = i + 1;
 
+                // Triangle 2 (i+1, i+X, i+X+1)
                 idx[t++] = i + 1;
                 idx[t++] = i + xVerts;
                 idx[t++] = i + xVerts + 1;
@@ -455,6 +517,7 @@ public class Ocean : MonoBehaviour
         mesh.triangles = idx;
 
         mesh.RecalculateBounds();
+        // Huge bounds so waves aren’t culled as they displace
         mesh.bounds = new Bounds(Vector3.zero, Vector3.one * 100000f);
         return mesh;
     }
