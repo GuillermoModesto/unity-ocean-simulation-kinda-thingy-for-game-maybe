@@ -26,10 +26,15 @@ public class BuoyantRigidbody : MonoBehaviour
     public float angularWaterDrag = 0.2f;
 
     [Header("Sampling")]
-    [Tooltip("Iterations for inverse-mapping sample (3�5 is plenty).")]
+    [Tooltip("Iterations for inverse-mapping sample (3–5 is plenty).")]
     [Range(0, 8)] public int sampleIterations = 4;
 
     Rigidbody _rb;
+
+    /// <summary>
+    /// True if at least one float point is submerged in the water this frame.
+    /// </summary>
+    public bool IsInWater { get; private set; }
 
     void Awake()
     {
@@ -43,7 +48,11 @@ public class BuoyantRigidbody : MonoBehaviour
 
     void FixedUpdate()
     {
-        if (floatPoints == null || floatPoints.Length == 0) return;
+        if (floatPoints == null || floatPoints.Length == 0)
+        {
+            IsInWater = false;
+            return;
+        }
 
         float perPointLift = (_rb.mass * Physics.gravity.magnitude / Mathf.Max(1, floatPoints.Length)) * buoyancyScale;
         bool anySubmerged = false;
@@ -79,6 +88,9 @@ public class BuoyantRigidbody : MonoBehaviour
         {
             _rb.AddTorque(-_rb.angularVelocity * angularWaterDrag, ForceMode.Force);
         }
+
+        // Expose result to other scripts
+        IsInWater = anySubmerged;
     }
 
 #if UNITY_EDITOR

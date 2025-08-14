@@ -43,13 +43,13 @@ Material:
     m_Floats:
     - _AlphaBase: 0.717
     - _AlphaFresnel: 0.231
-    - _FoamAmount: 1.77
+    - _FoamAmount: 1.06
     - _FoamCurvAmt: 2
     - _FoamEnabled: 0.589
     - _FoamHeightBias: 0.558
     - _FoamSharp: 0.5
-    - _FresnelBoost: 0.31
-    - _FresnelPower: 7.19
+    - _FresnelBoost: 0.06
+    - _FresnelPower: 4.4
     - _HeightRange: 14.81
     - _NormalAStr: 0.64
     - _NormalBStr: 1.16
