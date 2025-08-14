@@ -1,6 +1,6 @@
-﻿// Ocean.cs — single settings asset + Storminess slider (physically safe).
-// Keeps: naturalized Gerstner waves, optional interactions, fixed-size shader arrays,
-// transparency=1 → opaque, CPU sampling, and now: camera-centered LOD rings (no jobs/burst).
+﻿// Ocean.cs — single-patch endless ocean with long-swell storminess shaping.
+// Mesh: one boat/camera-centered grid (no LOD rings), rebuilt when the snapped center moves.
+// NOW: innerResolution is auto-calculated from innerSize to keep cell size ~ constant.
 
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -11,7 +11,7 @@ using System.Collections.Generic;
 public class Ocean : MonoBehaviour
 {
     [Header("Wave Settings")]
-    public OceanWaveSettings settings;     // The single source of truth
+    public OceanWaveSettings settings;
 
     [Header("Material / Physics")]
     public Material oceanMaterial;
@@ -19,38 +19,44 @@ public class Ocean : MonoBehaviour
     public float gravity = 9.81f;
 
     // ───────────────────────────────────────────────────────────────────────────
-    // LOD MESH (camera-centered inner patch + rings)
+    // SINGLE PATCH MESH (boat/camera-centered)
     // ───────────────────────────────────────────────────────────────────────────
-    [Header("LOD Mesh (camera-centered)")]
-    [Tooltip("Meters across the inner high-resolution square.")]
-    [Min(1f)] public float innerSize = 200f;
 
-    [Tooltip("Quads per side in the inner square (verts = quads+1).")]
-    [Min(1)] public int innerResolution = 100;
+    // ===== Patch performance presets (presets change innerSize; resolution is derived) =====
+    public enum PatchPreset { VeryLowEnd, LowEnd, MidRange, HighEnd, Custom }
 
-    [Tooltip("Ring widths (meters) added around the inner square (top/bottom/left/right strips per ring).")]
-    public float[] ringWidths = { 40f, 60f, 90f, 140f, 220f };
+    [Header("Patch Preset")]
+    [Tooltip("Preset sets innerSize only. innerResolution is auto from targetCellSize. Editing innerSize switches to Custom.")]
+    public PatchPreset patchPreset = PatchPreset.MidRange;
 
-    [Tooltip("Resolution (quads) along the long axis for each ring. Array length must match ringWidths.")]
-    public int[] ringRes = { 64, 48, 32, 24, 16 };
+    PatchPreset _lastPreset = (PatchPreset)(-1);
+    float _lastUserInnerSize;
 
-    [Tooltip("If >1, fixed cells across a ring strip; if 1, thickness derived from targetCellSize.")]
-    [Range(1, 6)] public int ringThicknessCells = 1;
+    [Header("Endless Patch")]
+    [Tooltip("Meters across the single high-resolution square.")]
+    [Min(1f)] public float innerSize = 650f;
 
-    [Tooltip("Meters per cell when ringThicknessCells == 1.")]
-    [Min(0.1f)] public float targetCellSize = 8f;
+    [Tooltip("Quads per side (auto). Derived from innerSize/targetCellSize to keep cell size consistent.")]
+    [Min(1)] public int innerResolution = 100; // auto-managed; shown for reference
 
-    [Header("LOD Rebuild")]
-    [Tooltip("If true, rebuild/center the mesh as the camera moves.")]
+    [Header("Patch Cells")]
+    [Tooltip("Desired meters per quad (kept approximately constant by deriving innerResolution).")]
+    [Min(0.5f)] public float targetCellSize = 6f;
+
+    [Tooltip("Clamp for auto-calculated resolution.")]
+    [Range(8, 2048)] public int minResolution = 64;
+    [Range(8, 4096)] public int maxResolution = 256;
+
+    [Tooltip("If true, rebuild the mesh when the snapped center moves.")]
     public bool rebuildAtRuntime = true;
 
-    [Tooltip("Minimum camera move before we rebuild/center (snapped by inner cell size).")]
-    [Min(0.01f)] public float rebuildDistanceThreshold = 10f;
+    [Tooltip("Min world movement (meters) before recentering/rebuilding. Usually >= cell size.")]
+    [Min(0.01f)] public float rebuildDistanceThreshold = 3f;
 
-    [Tooltip("Rebuild when any LOD parameter changes in the inspector.")]
-    public bool rebuildOnParamChange = true;
+    [Tooltip("If set, the patch centers on this transform (e.g., your boat). Otherwise camera/main.")]
+    public Transform lodFollowTarget;
 
-    [Tooltip("If null, Camera.main is used.")]
+    [Tooltip("Fallback camera if lodFollowTarget is not assigned.")]
     public Camera followCamera;
 
     [Header("Choppiness")]
@@ -78,24 +84,20 @@ public class Ocean : MonoBehaviour
     // -------------------------------------------------------------------
 
     [Header("Natural Variation")]
-    [Tooltip("Enable extra realism: split each wave into several components with slight dir/freq/phase differences.")]
+    [Tooltip("Split each wave into subcomponents with slight dir/freq/phase differences.")]
     public bool naturalize = true;
     [Range(1, 3)] public int componentsPerWave = 2;
     [Range(0f, 45f)] public float directionSpreadDeg = 18f;
-    [Tooltip("Random amplitude variance (± %)")]
     [Range(0f, 0.5f)] public float amplitudeJitter = 0.18f;
-    [Tooltip("Random wavelength variance (± %)")]
     [Range(0f, 0.3f)] public float wavelengthJitter = 0.10f;
-    [Tooltip("Random frequency variance (± %) applied to omega (prevents synchronized repetition).")]
     [Range(0f, 0.1f)] public float omegaJitter = 0.03f;
     [Tooltip("Seed for deterministic randomization. Changing it reshuffles the sea pattern.")]
     public int randomSeed = 1337;
 
     [Header("Wave Interactions")]
-    [Tooltip("Add bound-harmonic sum/difference components from pairs of waves to create visible interference patterns.")]
+    [Tooltip("Add bound-harmonic sum/difference components from pairs of waves to create interference patterns.")]
     public bool enableInteractions = true;
     [Range(0, 16)] public int maxInteractionComponents = 8;
-    [Tooltip("Scales interaction amplitude (A_i * A_j * strength). Keep small to avoid explosions.")]
     [Range(0f, 1f)] public float interactionStrength = 0.35f;
 
     [Header("Transparency Control")]
@@ -105,13 +107,13 @@ public class Ocean : MonoBehaviour
     // ===== Internals =====
     private const int MAX_WAVES = 32;                   // Keep in sync with shader
     private Vector4[] _dirTmp = new Vector4[MAX_WAVES]; // (Dx, Dz, A, S)
-    private Vector4[] _wlTmp = new Vector4[MAX_WAVES];  // (WL, omega, phi, _)
+    private Vector4[] _wlTmp = new Vector4[MAX_WAVES]; // (WL, omega, phi, _)
     private bool _arraysPrimed = false;
 
     private struct WaveCPU
     {
-        public float A, k, w, S, phi; // amplitude, wavenumber, angular frequency, steepness, phase offset
-        public Vector2 D;             // unit dir (x,z)
+        public float A, k, w, S, phi;
+        public Vector2 D;
     }
 
     private WaveCPU[] _cpuWaves = Array.Empty<WaveCPU>();
@@ -119,17 +121,15 @@ public class Ocean : MonoBehaviour
 
     private Material _appliedMat;
     private OceanWaveSettings _lastSettings;
-
-    // track live changes
     private float _lastStorminess = -1f;
 
-    // LOD mesh state/buffers
+    // mesh buffers/state
     Vector3[] _verts;
     Vector2[] _uvs;
     int[] _tris;
-    Vector3 _lastCenter;
+    Vector3 _lastCenter;   // snapped center (world)
     float _lastInnerSize;
-    int _lastInnerRes, _lastWidthHash, _lastResHash;
+    int _lastInnerRes;
 
     // ===== Unity lifecycle =====
     void OnEnable()
@@ -142,8 +142,10 @@ public class Ocean : MonoBehaviour
 
         ResubscribeSettings(settings);
 
+        ApplyPresetIfChanged(force: true);
+        RecomputeResolutionFromSize();   // keep cell size constant
         EnsureMesh();
-        RegenerateLODMesh();                     // build the LOD mesh once
+        RegeneratePatch();               // build once
         RecomputeAndApplyEffectiveWaves();
         UpdateMaterialProps(GetTimeSeconds());
         AdjustRenderQueueForTransparency();
@@ -166,8 +168,12 @@ public class Ocean : MonoBehaviour
         if (settings != _lastSettings)
             ResubscribeSettings(settings);
 
+        ApplyPresetIfChanged();
+        TrackUserOverridesToCustom();
+        RecomputeResolutionFromSize();   // recalc res after any size/preset edit
+
         EnsureMesh();
-        RegenerateLODMesh();
+        RegeneratePatch();
         RecomputeAndApplyEffectiveWaves();
         UpdateMaterialProps(GetTimeSeconds());
         AdjustRenderQueueForTransparency();
@@ -193,21 +199,23 @@ public class Ocean : MonoBehaviour
             RecomputeAndApplyEffectiveWaves();
         }
 
-        // live storminess updates
         if (!Mathf.Approximately(_lastStorminess, storminess))
         {
             _lastStorminess = storminess;
             RecomputeAndApplyEffectiveWaves();
         }
 
-        if (rebuildAtRuntime && ShouldRebuildLOD())
-            RegenerateLODMesh();
-
         UpdateMaterialProps(GetTimeSeconds());
         AdjustRenderQueueForTransparency();
     }
 
-    // ===== Fixed-size array priming (prevents Unity "cap to previous size" warnings) =====
+    void LateUpdate()
+    {
+        if (rebuildAtRuntime && ShouldRebuildPatch())
+            RegeneratePatch();
+    }
+
+    // ===== Fixed-size array priming =====
     private void PrimeArrayLengths()
     {
         if (!oceanMaterial || _arraysPrimed) return;
@@ -266,10 +274,8 @@ public class Ocean : MonoBehaviour
         int count; Vector4[] dir_amp_steep; Vector4[] wl_omega_phi; WaveCPU[] cpu; float assetChop;
         BakeFromAsset(settings, out count, out dir_amp_steep, out wl_omega_phi, out cpu, out assetChop, 0xA1B2C3D ^ randomSeed);
 
-        // Clamp to fixed buffer
         count = Mathf.Min(count, MAX_WAVES);
 
-        // Copy into fixed-size arrays
         Array.Clear(_dirTmp, 0, MAX_WAVES);
         Array.Clear(_wlTmp, 0, MAX_WAVES);
         if (count > 0)
@@ -278,41 +284,33 @@ public class Ocean : MonoBehaviour
             Array.Copy(wl_omega_phi, _wlTmp, count);
         }
 
-        // Push to material
         oceanMaterial?.SetVectorArray("_DirAmpSteep", _dirTmp);
         oceanMaterial?.SetVectorArray("_WlOmegaPad", _wlTmp); // z = phi
         oceanMaterial?.SetInt("_WaveCount", count);
         oceanMaterial?.SetVector("_OceanOrigin", transform.position);
 
-        // CPU sampler
         _cpuWaves = cpu;
     }
 
-    // ===== Baking (naturalization + optional pairwise interactions) =====
+    // ===== Baking (naturalization + interactions) =====
     static float Rand01(int key)
     {
-        unchecked
-        {
-            uint x = (uint)key;
-            x ^= x << 13; x ^= x >> 17; x ^= x << 5;
-            return (x & 0xFFFFFF) / 16777216f;
-        }
+        unchecked { uint x = (uint)key; x ^= x << 13; x ^= x >> 17; x ^= x << 5; return (x & 0xFFFFFF) / 16777216f; }
     }
     static float RandSigned(int key) => Rand01(key) * 2f - 1f;
 
     void BakeFromAsset(
-    OceanWaveSettings asset,
-    out int count,
-    out Vector4[] dir_amp_steep,
-    out Vector4[] wl_omega_phi,
-    out WaveCPU[] cpu,
-    out float assetChop,
-    int seed)
+        OceanWaveSettings asset,
+        out int count,
+        out Vector4[] dir_amp_steep,
+        out Vector4[] wl_omega_phi,
+        out WaveCPU[] cpu,
+        out float assetChop,
+        int seed)
     {
         assetChop = (asset ? asset.choppiness : 1f);
         var waves = (asset && asset.waves != null) ? asset.waves : Array.Empty<OceanWaveSettings.Wave>();
 
-        // --- Naturalization controls
         int splits = naturalize ? Mathf.Clamp(componentsPerWave, 1, 3) : 1;
         float[] weights = splits == 3 ? new float[] { 0.5f, 0.3f, 0.2f }
                         : splits == 2 ? new float[] { 0.6f, 0.4f }
@@ -323,7 +321,6 @@ public class Ocean : MonoBehaviour
         float wlJit = naturalize ? wavelengthJitter : 0f;
         float omgJit = naturalize ? omegaJitter : 0f;
 
-        // --- Scan wavelengths for normalization (favor LONG swells at storms)
         float minWL = float.MaxValue, maxWL = 0f;
         if (asset && asset.waves != null)
         {
@@ -334,10 +331,10 @@ public class Ocean : MonoBehaviour
                 if (wl > maxWL) maxWL = wl;
             }
         }
-        if (minWL > maxWL) { minWL = 1f; maxWL = 1f; } // fallback
+        if (minWL > maxWL) { minWL = 1f; maxWL = 1f; }
 
-        var dirList = new List<Vector4>(Mathf.Min(waves.Length * splits, MAX_WAVES)); // (Dx, Dz, A, S)
-        var wlList = new List<Vector4>(dirList.Capacity);                             // (WL, omega, phi, _)
+        var dirList = new List<Vector4>(Mathf.Min(waves.Length * splits, MAX_WAVES));
+        var wlList = new List<Vector4>(dirList.Capacity);
         var cpuList = new List<WaveCPU>(dirList.Capacity);
 
         for (int i = 0; i < waves.Length; i++)
@@ -353,35 +350,26 @@ public class Ocean : MonoBehaviour
 
                 int key = seed ^ (i * 73856093) ^ (s * 19349663);
 
-                // --- Direction spread
                 float spreadSign = Mathf.Sign(RandSigned(key + 11));
                 float spread = dirSpread * Mathf.Abs(RandSigned(key + 23));
                 float angle = (spread * spreadSign) * Mathf.Deg2Rad;
-
                 float ca = Mathf.Cos(angle), sa = Mathf.Sin(angle);
                 Vector2 D = new Vector2(Dbase.x * ca - Dbase.y * sa, Dbase.x * sa + Dbase.y * ca).normalized;
 
-                // --- Per-split weights & jitters
                 float share = weights[Mathf.Min(s, weights.Length - 1)];
                 float ampMulJ = 1f + ampJit * RandSigned(key + 101);
                 float wlMul = 1f + wlJit * RandSigned(key + 202);
                 float omgMul = 1f + omgJit * RandSigned(key + 303);
 
-                // ===== Amplitude (with storm shaping) =====
                 float A = wv.amplitude * share * ampMulJ;
-
-                // Jittered wavelength & wavenumber
                 float WL = Mathf.Max(0.001f, wv.wavelength * wlMul);
                 float k = 2f * Mathf.PI / WL;
 
-                // Global storm amplitude gain
                 float ampMulMax = Mathf.Max(1f, stormAmplitudeAt1);
                 float ampMul = Mathf.Lerp(1f, ampMulMax, Mathf.Clamp01(storminess));
 
-                // Long-swell boost at storms:
-                // long01 = 0 for shortest (WL == minWL), 1 for longest (WL == maxWL)
                 float long01 = (maxWL > minWL) ? Mathf.InverseLerp(minWL, maxWL, WL) : 0f;
-                float small01 = 1f - long01; // 1 for shortest waves, 0 for longest
+                float small01 = 1f - long01;
 
                 float longBoost = Mathf.Lerp(
                     1f,
@@ -391,37 +379,25 @@ public class Ocean : MonoBehaviour
 
                 A *= (ampMul * longBoost);
 
-                // ===== Frequency (omega) =====
                 float omega = (wv.speed > 0f) ? (k * wv.speed) : Mathf.Sqrt(Mathf.Max(0.0f, gravity) * k);
                 omega *= omgMul;
 
-                // ===== Steepness (with storm rounding) =====
-                // Base from authored steepness, global choppiness, and asset choppiness
                 float S_eff = wv.steepness * choppiness * assetChop;
-
-                // At high storm, reduce steepness to make waves rounder (stormSteepnessAt1 < 1 => less steep)
                 float steepMul = Mathf.Lerp(1f, Mathf.Max(0.01f, stormSteepnessAt1), Mathf.Clamp01(storminess));
-
-                // Still damp SHORT waves a bit more at storm to avoid spiky crests
                 float steepDampShort = Mathf.Lerp(1f, 0.7f, small01 * Mathf.Clamp01(storminess));
-
                 S_eff *= (steepMul * steepDampShort);
 
-                // Stability clamp: keep S * k * A < 1 (with margin)
                 float limit = 0.95f / Mathf.Max(1e-6f, k * Mathf.Max(1e-6f, A));
                 if (S_eff > limit) S_eff = limit;
 
-                // Random initial phase 0..2π
                 float phi = Rand01(key + 404) * Mathf.PI * 2f;
 
-                // Output
                 dirList.Add(new Vector4(D.x, D.y, A, S_eff));
                 wlList.Add(new Vector4(WL, omega, phi, 0f));
                 cpuList.Add(new WaveCPU { A = A, k = k, w = omega, S = S_eff, D = D, phi = phi });
             }
         }
 
-        // ===== Optional pairwise interactions =====
         if (enableInteractions && dirList.Count < MAX_WAVES && maxInteractionComponents > 0)
         {
             int n = dirList.Count;
@@ -454,7 +430,6 @@ public class Ocean : MonoBehaviour
             }
         }
 
-        // ===== Outputs =====
         count = dirList.Count;
         dir_amp_steep = dirList.ToArray();
         wl_omega_phi = wlList.ToArray();
@@ -474,7 +449,7 @@ public class Ocean : MonoBehaviour
         float A = interactionStrength * 0.5f * (Ai * Aj);
         if (A <= 1e-4f) return;
 
-        float S_eff = 0.5f; // conservative
+        float S_eff = 0.5f;
         float k = kmag;
 
         dirList.Add(new Vector4(D.x, D.y, A, S_eff));
@@ -491,193 +466,111 @@ public class Ocean : MonoBehaviour
     }
 
     // ───────────────────────────────────────────────────────────────────────────
-    // LOD mesh generation (center square + 4 strips per ring), no overlap
+    // Single patch mesh generation (no transform motion)
     // ───────────────────────────────────────────────────────────────────────────
-
-    struct Patch
-    {
-        public float x0, x1, z0, z1; // local-space rect
-        public int cols, rows;       // quads along X/Z
-        public int vertBase;         // offsets into shared arrays
-    }
-
     void EnsureMesh()
     {
         var mf = GetComponent<MeshFilter>();
         if (mf.sharedMesh == null)
         {
-            var mesh = new Mesh { name = "Ocean_LODMesh", indexFormat = IndexFormat.UInt32 };
+            var mesh = new Mesh { name = "Ocean_PatchMesh", indexFormat = IndexFormat.UInt32 };
             mf.sharedMesh = mesh;
         }
-        // do not rebuild here; RegenerateLODMesh handles (re)builds
     }
 
-    bool ShouldRebuildLOD()
+    bool ShouldRebuildPatch()
     {
         Vector3 center = GetSnappedCenter();
         float moved = Vector3.Distance(center, _lastCenter);
-
-        bool movedEnough = moved >= Mathf.Max(0.5f * GetInnerCellSize(), rebuildDistanceThreshold);
-        bool paramsChanged = rebuildOnParamChange &&
-                             (innerResolution != _lastInnerRes ||
-                              !Mathf.Approximately(innerSize, _lastInnerSize) ||
-                              Hash(ringWidths) != _lastWidthHash ||
-                              Hash(ringRes) != _lastResHash);
-
+        bool movedEnough = moved >= Mathf.Max(GetInnerCellSize(), rebuildDistanceThreshold);
+        bool paramsChanged = (innerResolution != _lastInnerRes) || !Mathf.Approximately(innerSize, _lastInnerSize);
         return movedEnough || paramsChanged;
     }
 
-    void RegenerateLODMesh()
+    void RegeneratePatch()
     {
         var mf = GetComponent<MeshFilter>();
         var mesh = mf.sharedMesh;
-        if (mesh == null) return;
+        if (!mesh) return;
 
-        // 1) Compute the snapped center in WORLD space (do NOT move transform)
+        // Make sure resolution matches size at runtime changes too
+        RecomputeResolutionFromSize();
+
         Vector3 centerWorld = GetSnappedCenter();
-
-        // 2) Outer extents for UV normalization
-        float far = 0f; for (int i = 0; i < ringWidths.Length; i++) far += Mathf.Max(0f, ringWidths[i]);
-        float halfInner = innerSize * 0.5f;
-        float areaSize = Mathf.Max(innerSize, (halfInner + far) * 2f);
-
-        // 3) Build patch descriptors in WORLD space (we'll convert to LOCAL when writing verts)
-        var patches = new List<Patch>();
-
-        float minXw = centerWorld.x - halfInner;
-        float maxXw = centerWorld.x + halfInner;
-        float minZw = centerWorld.z - halfInner;
-        float maxZw = centerWorld.z + halfInner;
-
-        int H = Mathf.Max(1, innerResolution);
-        patches.Add(new Patch { x0 = minXw, x1 = maxXw, z0 = minZw, z1 = maxZw, cols = H, rows = H });
-
-        float prevMinX = minXw, prevMaxX = maxXw, prevMinZ = minZw, prevMaxZ = maxZw;
-        int ringCount = Mathf.Min(ringWidths.Length, ringRes.Length);
-
-        for (int r = 0; r < ringCount; r++)
-        {
-            float w = Mathf.Max(0.01f, ringWidths[r]);
-            int R = Mathf.Max(1, ringRes[r]);
-
-            float newMinX = prevMinX - w, newMaxX = prevMaxX + w;
-            float newMinZ = prevMinZ - w, newMaxZ = prevMaxZ + w;
-
-            int rowsAcross = (ringThicknessCells > 1)
-                ? ringThicknessCells
-                : Mathf.Max(1, Mathf.RoundToInt(w / Mathf.Max(1f, targetCellSize)));
-
-            // top strip
-            patches.Add(new Patch { x0 = newMinX, x1 = newMaxX, z0 = prevMaxZ, z1 = newMaxZ, cols = R, rows = rowsAcross });
-            // bottom strip
-            patches.Add(new Patch { x0 = newMinX, x1 = newMaxX, z0 = newMinZ, z1 = prevMinZ, cols = R, rows = rowsAcross });
-            // left strip (long axis Z)
-            patches.Add(new Patch { x0 = newMinX, x1 = prevMinX, z0 = prevMinZ, z1 = prevMaxZ, cols = rowsAcross, rows = R });
-            // right strip
-            patches.Add(new Patch { x0 = prevMaxX, x1 = newMaxX, z0 = prevMinZ, z1 = prevMaxZ, cols = rowsAcross, rows = R });
-
-            prevMinX = newMinX; prevMaxX = newMaxX;
-            prevMinZ = newMinZ; prevMaxZ = newMaxZ;
-        }
-
-        // 4) Offsets + counts
-        int totalVerts = 0, totalTris = 0;
-        for (int p = 0; p < patches.Count; p++)
-        {
-            var patch = patches[p];
-            patch.vertBase = totalVerts;
-            patches[p] = patch;
-
-            int vPer = (patch.cols + 1) * (patch.rows + 1);
-            int tPer = patch.cols * patch.rows * 6;
-            totalVerts += vPer;
-            totalTris += tPer;
-        }
-
-        if (_verts == null || _verts.Length != totalVerts) _verts = new Vector3[totalVerts];
-        if (_uvs == null || _uvs.Length != totalVerts) _uvs = new Vector2[totalVerts];
-        if (_tris == null || _tris.Length != totalTris) _tris = new int[totalTris];
-
-        // 5) Fill verts (LOCAL) + UVs (stable across rebuilds)
-        //    - World -> Local: subtract transform.position
         Vector3 origin = transform.position;
 
-        for (int p = 0; p < patches.Count; p++)
+        int H = Mathf.Max(1, innerResolution);
+        float step = innerSize / H;
+        float half = innerSize * 0.5f;
+
+        int vertsCount = (H + 1) * (H + 1);
+        int trisCount = H * H * 6;
+
+        if (_verts == null || _verts.Length != vertsCount) _verts = new Vector3[vertsCount];
+        if (_uvs == null || _uvs.Length != vertsCount) _uvs = new Vector2[vertsCount];
+        if (_tris == null || _tris.Length != trisCount) _tris = new int[trisCount];
+
+        int v = 0;
+        for (int j = 0; j <= H; j++)
         {
-            var patch = patches[p];
-            int vCols = patch.cols + 1;
-            int vRows = patch.rows + 1;
-
-            int dst = patch.vertBase;
-            for (int j = 0; j < vRows; j++)
+            float zw = (centerWorld.z - half) + j * step;  // world Z
+            for (int i = 0; i <= H; i++)
             {
-                float fz = (patch.rows == 0) ? 0f : (float)j / patch.rows;
-                float zw = Mathf.Lerp(patch.z0, patch.z1, fz);     // WORLD Z
+                float xw = (centerWorld.x - half) + i * step; // world X
 
-                for (int i = 0; i < vCols; i++)
-                {
-                    float fx = (patch.cols == 0) ? 0f : (float)i / patch.cols;
-                    float xw = Mathf.Lerp(patch.x0, patch.x1, fx); // WORLD X
+                _verts[v] = new Vector3(xw - origin.x, 0f, zw - origin.z);
 
-                    float xl = xw - origin.x; // LOCAL X
-                    float zl = zw - origin.z; // LOCAL Z
-
-                    _verts[dst] = new Vector3(xl, 0f, zl);
-
-                    // UVs anchored to the current center to avoid precision drift
-                    // (use world coords so they don't depend on transform)
-                    _uvs[dst] = new Vector2(
-                        (xw - centerWorld.x + areaSize * 0.5f) / areaSize,
-                        (zw - centerWorld.z + areaSize * 0.5f) / areaSize
-                    );
-
-                    dst++;
-                }
+                // stable UVs relative to current center (0..1 across the patch)
+                _uvs[v] = new Vector2(
+                    (xw - centerWorld.x) / innerSize + 0.5f,
+                    (zw - centerWorld.z) / innerSize + 0.5f
+                );
+                v++;
             }
         }
 
-        // 6) Fill triangles
         int t = 0;
-        for (int p = 0; p < patches.Count; p++)
+        int stride = H + 1;
+        for (int j = 0; j < H; j++)
         {
-            var patch = patches[p];
-            int baseV = patch.vertBase;
-            int cols = patch.cols, rows = patch.rows;
-            int stride = cols + 1;
-
-            for (int j = 0; j < rows; j++)
+            for (int i = 0; i < H; i++)
             {
-                for (int i = 0; i < cols; i++)
-                {
-                    int a = baseV + j * stride + i;
-                    int b = a + 1;
-                    int c = a + stride;
-                    int d = c + 1;
+                int a = j * stride + i;
+                int b = a + 1;
+                int c = a + stride;
+                int d = c + 1;
 
-                    _tris[t++] = a; _tris[t++] = d; _tris[t++] = b;
-                    _tris[t++] = a; _tris[t++] = c; _tris[t++] = d;
-                }
+                _tris[t++] = a; _tris[t++] = d; _tris[t++] = b;
+                _tris[t++] = a; _tris[t++] = c; _tris[t++] = d;
             }
         }
 
-        // 7) Push to mesh
         mesh.Clear();
-        mesh.indexFormat = IndexFormat.UInt32;
+        mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
         mesh.SetVertices(_verts);
         mesh.SetUVs(0, _uvs);
         mesh.SetTriangles(_tris, 0);
 
-        // Huge bounds so GPU displacement isn't culled
+        // huge bounds so GPU displacement isn't culled
         mesh.bounds = new Bounds(Vector3.zero, Vector3.one * 100000f);
 
-        // 8) Remember state (in WORLD space)
         _lastCenter = centerWorld;
         _lastInnerSize = innerSize;
         _lastInnerRes = innerResolution;
-        _lastWidthHash = Hash(ringWidths);
-        _lastResHash = Hash(ringRes);
     }
 
+    // Derive resolution so cell size stays ~ targetCellSize.
+    void RecomputeResolutionFromSize()
+    {
+        // Ideal quads per side
+        float ideal = Mathf.Max(1f, innerSize / Mathf.Max(0.0001f, targetCellSize));
+        int res = Mathf.RoundToInt(ideal);
+
+        // Snap to even so (res+1) is odd — symmetric center
+        if ((res & 1) == 1) res++;
+
+        innerResolution = Mathf.Clamp(res, minResolution, maxResolution);
+    }
 
     float GetInnerCellSize()
     {
@@ -687,23 +580,16 @@ public class Ocean : MonoBehaviour
 
     Vector3 GetSnappedCenter()
     {
-        var cam = followCamera ? followCamera : Camera.main;
-        Vector3 camPos = cam ? cam.transform.position : transform.position;
-        float cell = GetInnerCellSize();
-        float x = Mathf.Round(camPos.x / cell) * cell;
-        float z = Mathf.Round(camPos.z / cell) * cell;
-        return new Vector3(x, transform.position.y, z);
-    }
+        Vector3 srcPos;
+        if (lodFollowTarget) srcPos = lodFollowTarget.position;
+        else if (followCamera) srcPos = followCamera.transform.position;
+        else if (Camera.main) srcPos = Camera.main.transform.position;
+        else srcPos = transform.position;
 
-    static int Hash(int[] arr)
-    {
-        if (arr == null) return 0;
-        unchecked { int h = 17; for (int i = 0; i < arr.Length; i++) h = h * 31 + arr[i]; return h; }
-    }
-    static int Hash(float[] arr)
-    {
-        if (arr == null) return 0;
-        unchecked { int h = 17; for (int i = 0; i < arr.Length; i++) h = h * 31 + Mathf.RoundToInt(arr[i] * 1000f); return h; }
+        float cell = GetInnerCellSize();
+        float x = Mathf.Round(srcPos.x / cell) * cell;
+        float z = Mathf.Round(srcPos.z / cell) * cell;
+        return new Vector3(x, transform.position.y, z);
     }
 
     // ===== Time helper (edit + play) =====
@@ -716,7 +602,40 @@ public class Ocean : MonoBehaviour
 #endif
     }
 
-    // ===== Public CPU sampling (robust for choppiness) =====
+    // ===== Presets (set size only; res is derived) =====
+    void ApplyPresetIfChanged(bool force = false)
+    {
+        if (!force && patchPreset == _lastPreset) return;
+
+        switch (patchPreset)
+        {
+            case PatchPreset.VeryLowEnd: innerSize = 320f; break; // mobile / very low-end
+            case PatchPreset.LowEnd: innerSize = 480f; break; // low-end PC baseline
+            case PatchPreset.MidRange: innerSize = 650f; break; // recommended default
+            case PatchPreset.HighEnd: innerSize = 900f; break; // cinematic/high-end
+            case PatchPreset.Custom: /* keep current */ break;
+        }
+
+        _lastPreset = patchPreset;
+        _lastUserInnerSize = innerSize;
+    }
+
+    void TrackUserOverridesToCustom()
+    {
+        if (patchPreset == PatchPreset.Custom) { _lastUserInnerSize = innerSize; return; }
+
+        if (!Mathf.Approximately(innerSize, _lastUserInnerSize))
+        {
+            patchPreset = PatchPreset.Custom;
+            _lastPreset = PatchPreset.Custom;
+        }
+        else
+        {
+            _lastUserInnerSize = innerSize;
+        }
+    }
+
+    // ===== Public CPU sampling =====
     public static void Sample(Vector2 worldXZ, out float height, out Vector3 normal, float t = -1f, int iterations = 4)
     {
         height = 0f; normal = Vector3.up;
@@ -725,7 +644,7 @@ public class Ocean : MonoBehaviour
 
         Vector2 xzTarget = worldXZ - _instance.transform.position.XZ();
 
-        // --- Inverse mapping: solve for x0 so x0 + dispH(x0) == xzTarget
+        // Inverse horiz displacement: solve x0 so x0 + dispH(x0) == xzTarget
         Vector2 x0 = xzTarget;
         for (int it = 0; it < Mathf.Max(0, iterations); it++)
         {
@@ -735,7 +654,7 @@ public class Ocean : MonoBehaviour
             {
                 var w = waves[i];
                 float dot = w.D.x * x0.x + w.D.y * x0.y;
-                float phase = w.k * dot - w.w * t + w.phi;   // phi included (matches shader)
+                float phase = w.k * dot - w.w * t + w.phi;
                 float c = Mathf.Cos(phase);
                 float QA = w.S * w.A;
                 dispH.x += QA * w.D.x * c;
@@ -746,7 +665,7 @@ public class Ocean : MonoBehaviour
             x0 = xNew;
         }
 
-        // --- Evaluate displacement + derivatives at x0
+        // Evaluate displacement + derivatives at x0
         Vector3 disp = Vector3.zero;
         Vector3 dPdX = new Vector3(1f, 0f, 0f);
         Vector3 dPdZ = new Vector3(0f, 0f, 1f);
