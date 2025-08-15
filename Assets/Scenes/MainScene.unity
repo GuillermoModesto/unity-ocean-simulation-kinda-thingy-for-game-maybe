@@ -284,6 +284,61 @@ Mesh:
     offset: 0
     size: 0
     path: 
+--- !u!114 &133100627
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cd56e3f0d5974f046975278e57b197ff, type: 3}
+  m_Name: ' (WindWorking)'
+  m_EditorClassIdentifier: 
+  uvOffset: {x: 0, y: 0}
+  choppiness: 0.9
+  waves:
+  - amplitude: 0.76968
+    steepness: 0.78886
+    wavelength: 80
+    speed: 0
+    directionDegrees: 40.758
+  - amplitude: 0.51312
+    steepness: 0.709974
+    wavelength: 60
+    speed: 0
+    directionDegrees: 45.758
+  - amplitude: 0.38484
+    steepness: 0.631088
+    wavelength: 40
+    speed: 0
+    directionDegrees: 55.758
+  - amplitude: 0.32070002
+    steepness: 0.552202
+    wavelength: 70
+    speed: 0
+    directionDegrees: 105.758
+  - amplitude: 0.23090401
+    steepness: 0.78886
+    wavelength: 18
+    speed: 0
+    directionDegrees: 50.758
+  - amplitude: 0.153936
+    steepness: 0.86774606
+    wavelength: 12
+    speed: 0
+    directionDegrees: 30.758
+  - amplitude: 0.102624
+    steepness: 1.104404
+    wavelength: 8
+    speed: 5
+    directionDegrees: 75.758
+  - amplitude: 0.076968
+    steepness: 1.419948
+    wavelength: 6
+    speed: 8
+    directionDegrees: 324.242
 --- !u!1 &203844586
 GameObject:
   m_ObjectHideFlags: 0
@@ -405,6 +460,11 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 61.998, y: -43.2, z: -15.804}
+--- !u!1 &219245174 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 1320253696054395029, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
+  m_PrefabInstance: {fileID: 1482903097}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &961739749
 GameObject:
   m_ObjectHideFlags: 0
@@ -614,7 +674,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 7854736020535481108, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 0.53
+      value: 3.25
       objectReference: {fileID: 0}
     - target: {fileID: 7854736020535481108, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
       propertyPath: m_LocalPosition.z
@@ -651,13 +711,55 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 1320253696054395029, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1670754756}
+    - targetCorrespondingSourceObject: {fileID: 1320253696054395029, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1670754757}
   m_SourcePrefab: {fileID: 100100000, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
 --- !u!4 &1670754751 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 7854736020535481108, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
   m_PrefabInstance: {fileID: 1482903097}
   m_PrefabAsset: {fileID: 0}
+--- !u!114 &1670754756
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 219245174}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f0d50d960d0e3bb42afe734d033360cf, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  contactThreshold: 0.2
+  projectVerticesToSurface: 1
+  contactPointColor: {r: 1, g: 0.5, b: 0, a: 1}
+  polygonEdgeColor: {r: 1, g: 1, b: 1, a: 1}
+  polygonFillColor: {r: 1, g: 1, b: 1, a: 0.08}
+  pointSize: 0.06
+  drawAlways: 0
+--- !u!114 &1670754757
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 219245174}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 03b863d9df104d24b8ec35a482bc01ae, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  contactThreshold: 0.03
+  contactRadius: 0.6
+  maxContacts: 48
+  contactFoamAmount: 1
+  rippleParams: {x: 20, y: 4, z: 2, w: 0.12}
 --- !u!1 &1862072623
 GameObject:
   m_ObjectHideFlags: 0
@@ -671,7 +773,6 @@ GameObject:
   - component: {fileID: 1862072625}
   - component: {fileID: 1862072624}
   - component: {fileID: 1862072628}
-  - component: {fileID: 1862072629}
   m_Layer: 0
   m_Name: Ocean
   m_TagString: Untagged
@@ -691,7 +792,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3555e9eae4db34747b52c22d7ef04ff7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  settings: {fileID: 2032960201}
+  settings: {fileID: 133100627}
   oceanMaterial: {fileID: 2100000, guid: 9ce73567e04e7da4aa9f2162f7160a86, type: 2}
   gravity: 9.81
   patchPreset: 3
@@ -812,78 +913,6 @@ MonoBehaviour:
   steepGainShortAt1: 1
   steepGainLongAt1: 2.43
   stabilityMargin: 0.98
---- !u!114 &1862072629
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1862072623}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 03b863d9df104d24b8ec35a482bc01ae, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  contactThreshold: 2
-  contactRadius: 5
-  maxContacts: 48
-  contactFoamAmount: 0.4
-  rippleParams: {x: 20, y: 4, z: 2, w: 0.12}
---- !u!114 &2032960201
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: cd56e3f0d5974f046975278e57b197ff, type: 3}
-  m_Name: ' (WindWorking)'
-  m_EditorClassIdentifier: 
-  uvOffset: {x: 0, y: 0}
-  choppiness: 0.9
-  waves:
-  - amplitude: 0.76968
-    steepness: 0.78886
-    wavelength: 80
-    speed: 0
-    directionDegrees: 40.758
-  - amplitude: 0.51312
-    steepness: 0.709974
-    wavelength: 60
-    speed: 0
-    directionDegrees: 45.758
-  - amplitude: 0.38484
-    steepness: 0.631088
-    wavelength: 40
-    speed: 0
-    directionDegrees: 55.758
-  - amplitude: 0.32070002
-    steepness: 0.552202
-    wavelength: 70
-    speed: 0
-    directionDegrees: 105.758
-  - amplitude: 0.23090401
-    steepness: 0.78886
-    wavelength: 18
-    speed: 0
-    directionDegrees: 50.758
-  - amplitude: 0.153936
-    steepness: 0.86774606
-    wavelength: 12
-    speed: 0
-    directionDegrees: 30.758
-  - amplitude: 0.102624
-    steepness: 1.104404
-    wavelength: 8
-    speed: 5
-    directionDegrees: 75.758
-  - amplitude: 0.076968
-    steepness: 1.419948
-    wavelength: 6
-    speed: 8
-    directionDegrees: 324.242
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

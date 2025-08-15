@@ -280,6 +280,9 @@ Shader "Ocean/GerstnerURP_Simplified_Green"
                 // Tint toward white based on contact foam amount
                 col = lerp(col, float3(1,1,1), saturate(contactFoam * _ContactFoamAmount));
 
+                // No contactFoam version (remove full loop and contactFoam)
+                // col = lerp(col, _FoamColor.rgb, foamMask);
+
                 float aOut = saturate(_Transparency);
 
                 return float4(col, aOut);
