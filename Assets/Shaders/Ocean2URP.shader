@@ -104,6 +104,13 @@ Shader "Ocean/GerstnerURP_Simplified_Green"
             struct Attributes { float4 positionOS:POSITION; };
             struct Varyings   { float4 positionCS:SV_POSITION; float3 worldPos:TEXCOORD0; float3 worldNorm:TEXCOORD1; };
 
+            // --- Contact foam inputs (set from ContactFoamManager) ---
+            #define MAX_CONTACTS 64
+            int    _ContactCount;
+            float4 _ContactPoints[MAX_CONTACTS]; // (x=worldX, y=worldZ, z=radius, w=strength)
+            float  _ContactFoamAmount;           // overall intensity
+            float4 _ContactRipple;               // (frequency, speed, decay, strength)
+
             float3 UnpackRG(float4 t, float strength)
             {
                 float3 n;
@@ -242,7 +249,36 @@ Shader "Ocean/GerstnerURP_Simplified_Green"
                 float foamMask = _FoamEnabled * (slopeCrest + curv * _FoamCurvAmt) * (0.6 + 0.4*noise) * peak * _FoamAmount;
                 foamMask = saturate(foamMask);
 
-                col = lerp(col, _FoamColor.rgb, foamMask);
+                // --- Contact-based foam along hull-water intersection ---
+                float contactFoam = 0.0;
+                [loop]
+                for (int i = 0; i < _ContactCount; i++)
+                {
+                    float2 center = _ContactPoints[i].xy;
+                    float  radius = max(1e-4, _ContactPoints[i].z);
+                    float  strength = _ContactPoints[i].w;
+
+                    // distance in "radius" units
+                    float2 d = (IN.worldPos.xz - center) / radius;
+                    float  dist = length(d);
+
+                    // Soft white foam with outward gradient
+                    float edge = 1.0 - saturate(dist);          // 1 at center, 0 at radius
+                    edge = edge * edge;                          // soften falloff
+                    float localFoam = edge * strength;
+
+                    // Linear ripples radiating out of the contact line
+                    float freq   = _ContactRipple.x;
+                    float speed  = _ContactRipple.y;
+                    float decay  = _ContactRipple.z;
+                    float amp    = _ContactRipple.w;
+                    float ripple = sin(dist * freq - _TimeSeconds * speed) * exp(-dist * decay) * amp;
+
+                    contactFoam = max(contactFoam, localFoam + ripple);
+                }
+
+                // Tint toward white based on contact foam amount
+                col = lerp(col, float3(1,1,1), saturate(contactFoam * _ContactFoamAmount));
 
                 float aOut = saturate(_Transparency);
 

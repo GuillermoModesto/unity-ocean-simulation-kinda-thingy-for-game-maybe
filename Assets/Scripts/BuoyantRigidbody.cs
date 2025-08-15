@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Rendering.Universal;
 
 [RequireComponent(typeof(Rigidbody))]
 public class BuoyantRigidbody : MonoBehaviour
@@ -109,25 +111,4 @@ public class BuoyantRigidbody : MonoBehaviour
         }
         return normal.normalized;
     }
-
-#if UNITY_EDITOR
-    void OnDrawGizmos()
-    {
-        if (FloatPoints == null) return;
-
-        Gizmos.color = Color.green;
-        foreach (var fp in FloatPoints)
-        {
-            if (!fp) continue;
-            Gizmos.DrawSphere(fp.position, 0.1f);
-        }
-
-        if (Application.isPlaying)
-        {
-            Gizmos.color = Color.red;
-            Gizmos.DrawCube(new Vector3(Center.x, WaterLine, Center.z), Vector3.one * 0.3f);
-            Gizmos.DrawRay(new Vector3(Center.x, WaterLine, Center.z), _targetUp);
-        }
-    }
-#endif
 }
