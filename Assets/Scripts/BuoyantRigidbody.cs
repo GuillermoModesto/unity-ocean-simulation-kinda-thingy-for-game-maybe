@@ -1,108 +1,137 @@
 using UnityEngine;
 
-/// <summary>
-/// Rigidbody buoyancy using Transform-defined float points you place in the scene.
-/// Add empty child objects where you want the waterline contact points and assign them here.
-/// </summary>
 [RequireComponent(typeof(Rigidbody))]
 public class BuoyantRigidbody : MonoBehaviour
 {
-    [Header("Floaters (assign scene Transforms)")]
-    [Tooltip("Place empties under this object (or anywhere) and assign them here.")]
-    public Transform[] floatPoints;
+    [Header("Float Settings")]
+    public float AirDrag = 1f;
+    public float WaterDrag = 10f;
+    public bool AffectDirection = true;
+    public bool AttachToSurface = false;
+    public Transform[] FloatPoints;
 
-    [Header("Buoyancy")]
-    [Tooltip("Meters of submergence for full buoyant force at a point.")]
-    public float maxSubmergence = 0.5f;
-    [Tooltip("Extra height added to sampled water (shifts waterline).")]
-    public float waterlineOffset = 0f;
-    [Tooltip("1 = total full-submergence lift equals weight. Adjust up/down to taste.")]
-    public float buoyancyScale = 1f;
+    // Internal state
+    private Rigidbody _rb;
+    private Vector3[] _waterLinePoints;
+    private Vector3 _centerOffset;
+    private Vector3 _smoothVectorRotation;
+    private Vector3 _targetUp;
 
-    [Header("Water Drag")]
-    [Tooltip("Linear drag applied to point velocity while submerged.")]
-    public float waterDrag = 2.0f;
-    [Tooltip("Extra angular damping while any point is submerged.")]
-    public float angularWaterDrag = 0.2f;
-
-    [Header("Sampling")]
-    [Tooltip("Iterations for inverse-mapping sample (3–5 is plenty).")]
-    [Range(0, 8)] public int sampleIterations = 4;
-
-    Rigidbody _rb;
-
-    /// <summary>
-    /// True if at least one float point is submerged in the water this frame.
-    /// </summary>
+    public float WaterLine { get; private set; }
     public bool IsInWater { get; private set; }
+    public Vector3 Center => transform.position + _centerOffset;
 
     void Awake()
     {
         _rb = GetComponent<Rigidbody>();
-        if (Application.isPlaying)
-        {
-            _rb.linearDamping = 0.1f;
-            _rb.angularDamping = 0.05f;
-        }
+        _rb.useGravity = false; // we handle gravity ourselves
+
+        _waterLinePoints = new Vector3[FloatPoints.Length];
+
+        // Precompute center offset
+        Vector3 avg = Vector3.zero;
+        for (int i = 0; i < FloatPoints.Length; i++)
+            avg += FloatPoints[i].position;
+        avg /= Mathf.Max(1, FloatPoints.Length);
+
+        _centerOffset = avg - transform.position;
     }
 
     void FixedUpdate()
     {
-        if (floatPoints == null || floatPoints.Length == 0)
+        if (FloatPoints == null || FloatPoints.Length == 0) return;
+
+        float newWaterLine = 0f;
+        bool pointUnderWater = false;
+
+        // Collect wave-sampled water line points
+        for (int i = 0; i < FloatPoints.Length; i++)
         {
-            IsInWater = false;
-            return;
+            Vector3 fp = FloatPoints[i].position;
+            float h; Vector3 n;
+            Ocean.Sample(new Vector2(fp.x, fp.z), out h, out n);
+
+            _waterLinePoints[i] = new Vector3(fp.x, h, fp.z);
+            newWaterLine += h / FloatPoints.Length;
+
+            if (h > fp.y) pointUnderWater = true;
         }
 
-        float perPointLift = (_rb.mass * Physics.gravity.magnitude / Mathf.Max(1, floatPoints.Length)) * buoyancyScale;
-        bool anySubmerged = false;
+        WaterLine = newWaterLine;
 
-        for (int i = 0; i < floatPoints.Length; i++)
+        // Compute average up vector
+        _targetUp = GetNormal(_waterLinePoints);
+
+        // Apply buoyancy
+        Vector3 gravity = Physics.gravity;
+        _rb.linearDamping = AirDrag;
+
+        if (WaterLine > Center.y)
         {
-            var fp = floatPoints[i];
-            if (!fp) continue;
+            IsInWater = true;
+            _rb.linearDamping = WaterDrag;
 
-            Vector3 worldPoint = fp.position;
-
-            float h; Vector3 n;
-            Ocean.Sample(new Vector2(worldPoint.x, worldPoint.z), out h, out n, t: -1f, iterations: sampleIterations);
-
-            float waterY = h + waterlineOffset;
-            float depth = waterY - worldPoint.y; // positive = under water
-
-            if (depth > 0f)
+            if (AttachToSurface)
             {
-                anySubmerged = true;
-
-                float submergence = Mathf.Clamp01(depth / Mathf.Max(0.0001f, maxSubmergence));
-                Vector3 lift = n.normalized * (perPointLift * submergence);
-                _rb.AddForceAtPosition(lift, worldPoint, ForceMode.Force);
-
-                Vector3 vPoint = _rb.GetPointVelocity(worldPoint);
-                Vector3 drag = -vPoint * waterDrag * submergence;
-                _rb.AddForceAtPosition(drag, worldPoint, ForceMode.Force);
+                // snap to surface
+                _rb.position = new Vector3(_rb.position.x, WaterLine - _centerOffset.y, _rb.position.z);
+            }
+            else
+            {
+                // push up toward surface
+                gravity = AffectDirection ? _targetUp * -Physics.gravity.y : -Physics.gravity;
+                transform.Translate(Vector3.up * (WaterLine - Center.y) * 0.9f);
             }
         }
-
-        if (anySubmerged)
+        else
         {
-            _rb.AddTorque(-_rb.angularVelocity * angularWaterDrag, ForceMode.Force);
+            IsInWater = false;
         }
 
-        // Expose result to other scripts
-        IsInWater = anySubmerged;
+        _rb.AddForce(gravity * Mathf.Clamp(Mathf.Abs(WaterLine - Center.y), 0f, 1f), ForceMode.Acceleration);
+
+        // Rotate boat to align with water normal
+        if (pointUnderWater)
+        {
+            _targetUp = Vector3.SmoothDamp(transform.up, _targetUp, ref _smoothVectorRotation, 0.2f);
+            _rb.rotation = Quaternion.FromToRotation(transform.up, _targetUp) * _rb.rotation;
+        }
+    }
+
+    // Utility to get averaged surface normal
+    private Vector3 GetNormal(Vector3[] points)
+    {
+        if (points.Length < 3) return Vector3.up;
+
+        Vector3 normal = Vector3.zero;
+        for (int i = 0; i < points.Length; i++)
+        {
+            Vector3 current = points[i];
+            Vector3 next = points[(i + 1) % points.Length];
+            normal.x += (current.y - next.y) * (current.z + next.z);
+            normal.y += (current.z - next.z) * (current.x + next.x);
+            normal.z += (current.x - next.x) * (current.y + next.y);
+        }
+        return normal.normalized;
     }
 
 #if UNITY_EDITOR
-    void OnDrawGizmosSelected()
+    void OnDrawGizmos()
     {
-        if (floatPoints == null) return;
-        Gizmos.color = Color.cyan;
-        foreach (var t in floatPoints)
+        if (FloatPoints == null) return;
+
+        Gizmos.color = Color.green;
+        foreach (var fp in FloatPoints)
         {
-            if (!t) continue;
-            Gizmos.DrawWireSphere(t.position, 0.06f);
-            Gizmos.DrawLine(t.position, t.position + Vector3.up * 0.25f);
+            if (!fp) continue;
+            Gizmos.DrawSphere(fp.position, 0.1f);
+        }
+
+        if (Application.isPlaying)
+        {
+            Gizmos.color = Color.red;
+            Gizmos.DrawCube(new Vector3(Center.x, WaterLine, Center.z), Vector3.one * 0.3f);
+            Gizmos.DrawRay(new Vector3(Center.x, WaterLine, Center.z), _targetUp);
         }
     }
 #endif

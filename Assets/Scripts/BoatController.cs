@@ -1,3 +1,12 @@
+/*
+ Summary: Simple boat controller that adds steering and thrust forces while in water, with optional motor visual yaw and particle effects.
+
+ Usage:
+   - Requires BuoyantRigidbody and Rigidbody on the same GameObject.
+   - Bind movement on the 'Player/Move' action (WASD/left stick).
+   - Adjust 'Power', 'MaxSpeed', and 'SteerPower' per craft.
+*/
+
 ﻿using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -21,19 +30,16 @@ public class BoatController : MonoBehaviour
     public float bodyDrag = 0.2f;
     public float bodyAngularDrag = 1f;
 
-    // components
     private Rigidbody _rb;
     private BuoyantRigidbody _buoyant;
     private Quaternion _startRotation;
     private ParticleSystem _particleSystem;
     private Camera _camera;
 
-    // input
     private InputSystem_Actions _actions;
     private Vector2 _move;
     private bool _hasActions;
 
-    // internal
     private Vector3 _camVel;
 
     void Awake()
@@ -44,11 +50,9 @@ public class BoatController : MonoBehaviour
         _startRotation = Motor ? Motor.localRotation : Quaternion.identity;
         _camera = Camera.main;
 
-        // Rigidbody baseline like original
         _rb.linearDamping = bodyDrag;
         _rb.angularDamping = bodyAngularDrag;
 
-        // Setup new Input System
         _actions = new InputSystem_Actions();
         _actions.Player.Move.performed += ctx => _move = ctx.ReadValue<Vector2>();
         _actions.Player.Move.canceled += ctx => _move = Vector2.zero;
@@ -67,14 +71,13 @@ public class BoatController : MonoBehaviour
 
     void FixedUpdate()
     {
-        // If not in water, don't apply controls
+
         if (_buoyant == null || !_buoyant.IsInWater)
         {
             if (_particleSystem) _particleSystem.Pause();
             return;
         }
 
-        // --------- Steering ----------
         int steer = 0;
         if (_move.x > 0.2f) steer = -1;
         if (_move.x < -0.2f) steer = 1;
@@ -84,7 +87,6 @@ public class BoatController : MonoBehaviour
         else
             _rb.AddTorque(steer * Vector3.up * (SteerPower / 10f), ForceMode.Force);
 
-        // --------- Forward / backward thrust ----------
         Vector3 forward = Vector3.Scale(new Vector3(1f, 0f, 1f), transform.forward);
 
         if (_move.y > 0.2f)
@@ -102,7 +104,6 @@ public class BoatController : MonoBehaviour
             if (_particleSystem) _particleSystem.Pause();
         }
 
-        // --------- Motor visual yaw ----------
         if (Motor)
         {
             float visualSteer = (steer == 0) ? 0f : (steer > 0 ? 30f : -30f);
@@ -112,7 +113,6 @@ public class BoatController : MonoBehaviour
             );
         }
 
-        // --------- Align velocity ----------
         bool movingForward = Vector3.Cross(transform.forward, _rb.linearVelocity).y < 0f;
         Vector3 desiredDir = (movingForward ? 1f : 0f) * transform.forward;
 

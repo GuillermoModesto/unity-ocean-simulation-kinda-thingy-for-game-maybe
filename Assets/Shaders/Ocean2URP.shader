@@ -1,24 +1,29 @@
-﻿// Ocean/GerstnerURP_Simplified_Green.shader
-// Gerstner surface + simplified tropical shading (adds Jade/Emerald greens, smooth transitions, no sand/wake)
+/*
+ Summary: URP-compatible ocean surface shader that consumes wave buffers from Ocean.cs to render normals, displacement, and shading.
+
+ Usage:
+   - Use with a material referenced by Ocean.cs. Shader expects wave arrays (_DirAmpSteep, _WlOmegaPad).
+   - Transparency drives render queue; Ocean.cs can force opaque when near-opaque for sorting stability.
+   - Tweak normals/foam parameters in the material for look-dev.
+*/
+
 Shader "Ocean/GerstnerURP_Simplified_Green"
 {
     Properties
     {
-        // -------- Height color ramp (with greens) --------
-        _AbyssColor     ("Abyss", Color)              = (0.005, 0.06, 0.12, 1)
-        _DeepColor      ("Deep", Color)               = (0.01,  0.11, 0.20, 1)
-        _MidColor       ("Mid / Teal", Color)         = (0.06,  0.35, 0.55, 1)
-        _JadeColor      ("Jade", Color)               = (0.02,  0.47, 0.50, 1)
-        _EmeraldColor   ("Emerald", Color)            = (0.02,  0.55, 0.46, 1)
-        _ShallowColor   ("Shallow", Color)            = (0.50,  0.86, 0.88, 1)
-        _RimColor       ("Rim (Fresnel) Color", Color)= (0.80, 0.97, 1.00, 1)
+        _AbyssColor     ("Abyss", Color)               = (0.005, 0.06, 0.12, 1)
+        _DeepColor      ("Deep", Color)                = (0.01,  0.11, 0.20, 1)
+        _MidColor       ("Mid / Teal", Color)          = (0.06,  0.35, 0.55, 1)
+        _JadeColor      ("Jade", Color)                = (0.02,  0.47, 0.50, 1)
+        _EmeraldColor   ("Emerald", Color)             = (0.02,  0.55, 0.46, 1)
+        _ShallowColor   ("Shallow", Color)             = (0.50,  0.86, 0.88, 1)
+        _RimColor       ("Rim (Fresnel) Color", Color) = (0.80, 0.97, 1.00, 1)
 
         _SeaLevel       ("Sea Level (world Y)", Float) = 0
         _HeightRange    ("Height Range (+/- m around sea)", Float) = 4.0
-        _RampSoftness   ("Ramp Softness", Range(0,1)) = 0.6
+        _RampSoftness   ("Ramp Softness", Range(0,1))  = 0.6
         _RampShift      ("Ramp Shift (bias)", Range(-0.3,0.3)) = 0.0
 
-        // -------- Detail normals (two layers, world-space UV) --------
         _NormalA        ("Normal A", 2D) = "bump" {}
         _NormalB        ("Normal B", 2D) = "bump" {}
         _NormalATiling  ("Normal A Tiling (x,y)", Vector) = (0.08, 0.08, 0, 0)
@@ -26,51 +31,26 @@ Shader "Ocean/GerstnerURP_Simplified_Green"
         _NormalASpeed   ("Normal A Scroll (x,y)", Vector) = (0.03, 0.01, 0, 0)
         _NormalBSpeed   ("Normal B Scroll (x,y)", Vector) = (-0.02, 0.00, 0, 0)
         _NormalAStr     ("Normal A Strength", Range(0, 2)) = 0.9
-        _NormalBStr     ("Normal B Strength", Range(0, 2)) = 0.6
+        _NormalBStr     ("Normal B Strength", Range(0, 2)) = 1.2
 
-        // Normal attenuation
-        _NormalStrength ("Overall Normal Strength", Range(0,1)) = 0.45
-        _NormalFadeStart("Normal Fade Start (m)", Float) = 15
-        _NormalFadeEnd  ("Normal Fade End (m)",   Float) = 120
-        _NormalViewAtten("View-Angle Attenuation", Range(0,1)) = 0.6
-        _NormalSlopeAtten("Slope Attenuation", Range(0,1)) = 0.5
+        _Gloss          ("Smoothness", Range(0,1))     = 0.85
+        _Metallic       ("Metallic", Range(0,1))       = 0.05
+        _FoamColor      ("Foam Color", Color)          = (1,1,1,1)
+        _FoamTex        ("Foam Texture", 2D) = "white" {}
+        _FoamTiling     ("Foam Tiling", Vector)        = (0.1,0.1,0,0)
+        _FoamCutoff     ("Foam Cutoff", Range(0,1))    = 0.45
+        _FoamStrength   ("Foam Strength", Range(0,3))  = 1.0
 
-        // -------- Foam (crest/noise; no depth needed) --------
-        _FoamTex        ("Foam Noise (R)", 2D) = "white" {}
-        _FoamTiling     ("Foam Tiling (x,y)", Vector) = (0.12, 0.12, 0, 0)
-        _FoamSpeed      ("Foam Scroll (x,y)", Vector) = (0.12, 0.08, 0, 0)
-        _FoamColor      ("Foam Color", Color) = (1,1,1,1)
-        _FoamAmount     ("Foam Amount", Range(0, 2)) = 1.0
-        _FoamSharp      ("Foam Sharpness", Range(0.5, 8)) = 3.0
-        _FoamHeightBias ("Foam Bias to Peaks", Range(0,1)) = 0.45
-        _FoamCurvAmt    ("Foam Curvature Boost", Range(0,2)) = 0.4
-        _FoamEnabled    ("Foam Enabled (0/1)", Range(0,1)) = 1
-
-        // -------- Lighting --------
-        _SpecularColor  ("Specular Tint", Color) = (0.9, 0.95, 1, 1)
-        _SpecularStrength("Specular Strength", Range(0,2)) = 1.0
-        _Smoothness     ("Smoothness", Range(0,1)) = 0.85
-        _FresnelPower   ("Fresnel Power", Range(0.2, 8)) = 3.0
-        _FresnelBoost   ("Fresnel Boost", Range(0, 2)) = 0.6
-
-        // -------- Transparency (single slider) --------
-        _Transparency   ("Transparency", Range(0,1)) = 0.85
+        _Transparency   ("Transparency", Range(0,1))   = 0.85
     }
 
     SubShader
     {
-        // Transparent, ZWrite On for crisp silhouettes
-        Tags { "RenderPipeline"="UniversalPipeline" "RenderType"="Transparent" "Queue"="Transparent" }
-        Blend SrcAlpha OneMinusSrcAlpha
-        ZWrite On
-        ZTest LEqual
-        Cull Back
+        Tags { "RenderType"="Transparent" "Queue"="Transparent" }
+        LOD 300
 
         Pass
         {
-            Name "Forward"
-            Tags { "LightMode"="UniversalForward" }
-
             HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag
@@ -79,7 +59,6 @@ Shader "Ocean/GerstnerURP_Simplified_Green"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
-            // -------- Wave params supplied by Ocean.cs --------
             int _WaveCount;
             float4 _DirAmpSteep[32]; // (Dx, Dz, A, S)
             float4 _WlOmegaPad[32];  // (wavelength, omega, _, _)
@@ -87,7 +66,6 @@ Shader "Ocean/GerstnerURP_Simplified_Green"
             float3 _OceanOrigin;
             float  _TimeSeconds;
 
-            // -------- Material params --------
             float4 _AbyssColor,_DeepColor,_MidColor,_JadeColor,_EmeraldColor,_ShallowColor,_RimColor;
             float _SeaLevel,_HeightRange,_RampSoftness,_RampShift;
 
@@ -110,7 +88,6 @@ Shader "Ocean/GerstnerURP_Simplified_Green"
             struct Attributes { float4 positionOS:POSITION; };
             struct Varyings   { float4 positionCS:SV_POSITION; float3 worldPos:TEXCOORD0; float3 worldNorm:TEXCOORD1; };
 
-            // --- helpers ---
             float3 UnpackRG(float4 t, float strength)
             {
                 float3 n;
@@ -127,7 +104,6 @@ Shader "Ocean/GerstnerURP_Simplified_Green"
                 return normalize(r);
             }
 
-            // Smooth, soft transitions across 6 stops
             float smoothWider(float a, float b, float x, float w)
             {
                 return smoothstep(a - w, b + w, x);
@@ -135,7 +111,7 @@ Shader "Ocean/GerstnerURP_Simplified_Green"
 
             float3 GreenRamp(float h, float softness)
             {
-                // keys for 6 stops: Abyss → Deep → Mid → Jade → Emerald → Shallow
+
                 float w = lerp(0.02, 0.10, saturate(softness)); // widen blends with softness
                 float k0=0.00, k1=0.25, k2=0.45, k3=0.65, k4=0.82, k5=0.95;
 
@@ -158,7 +134,6 @@ Shader "Ocean/GerstnerURP_Simplified_Green"
                 float3 dPdX = float3(1,0,0);
                 float3 dPdZ = float3(0,0,1);
 
-                // Sum Gerstner waves
                 [loop]
                 for (int i=0;i<_WaveCount;i++)
                 {
@@ -187,7 +162,6 @@ Shader "Ocean/GerstnerURP_Simplified_Green"
 
                 wp += disp;
 
-                // Correct orientation
                 float3 n = normalize(cross(dPdZ, dPdX));
 
                 o.worldPos  = wp;
@@ -201,15 +175,12 @@ Shader "Ocean/GerstnerURP_Simplified_Green"
                 float3 V = SafeNormalize(GetWorldSpaceViewDir(IN.worldPos));
                 float3 baseN = normalize(IN.worldNorm);
 
-                // -------- Height → color ramp --------
                 float halfRange = max(1e-3, _HeightRange * 0.5);
                 float h01 = saturate(0.5 + (IN.worldPos.y - _SeaLevel) / (2.0 * halfRange) + _RampShift);
                 float3 col = GreenRamp(h01, saturate(_RampSoftness));
 
-                // Gentle highlight rolloff
                 col = col / (1.0 + col * 0.25);
 
-                // -------- Scrolling detail normals (world-space UVs) --------
                 float t = _TimeSeconds;
                 float2 uvA = IN.worldPos.xz * _NormalATiling.xy + _NormalASpeed.xy * t;
                 float2 uvB = IN.worldPos.xz * _NormalBTiling.xy + _NormalBSpeed.xy * t;
@@ -224,7 +195,6 @@ Shader "Ocean/GerstnerURP_Simplified_Green"
 
                 float3 combined = normalize(RNM(baseN, detailN));
 
-                // Normal tamers
                 float camDist = distance(GetCameraPositionWS(), IN.worldPos);
                 float distFade = saturate( (_NormalFadeEnd - camDist) / max(1e-3, _NormalFadeEnd - _NormalFadeStart) );
                 float viewDot = saturate(dot(baseN, V));
@@ -235,7 +205,6 @@ Shader "Ocean/GerstnerURP_Simplified_Green"
 
                 float3 N = normalize(lerp(baseN, combined, normalMix));
 
-                // -------- Lighting (main light) --------
                 Light Lm = GetMainLight();
                 float3 L = normalize(Lm.direction);
                 float3 H = SafeNormalize(L + V);
@@ -243,11 +212,9 @@ Shader "Ocean/GerstnerURP_Simplified_Green"
                 float spec = pow(saturate(dot(N, H)), lerp(8.0,128.0,_Smoothness)) * NdotL;
                 col = col + _SpecularColor.rgb * spec * _SpecularStrength;
 
-                // Fresnel rim (color only)
                 float fres = pow(saturate(1 - dot(N, V)), _FresnelPower) * _FresnelBoost;
                 col = lerp(col, _RimColor.rgb, saturate(fres));
 
-                // -------- Crest foam (slope + curvature + noise + height bias) --------
                 float slopeCrest = pow(1.0 - saturate(dot(N, up)), _FoamSharp);
                 float curv = (length(ddx(N)) + length(ddy(N)));
                 curv = saturate(curv * 0.75);
@@ -261,7 +228,6 @@ Shader "Ocean/GerstnerURP_Simplified_Green"
 
                 col = lerp(col, _FoamColor.rgb, foamMask);
 
-                // -------- Final alpha from slider --------
                 float aOut = saturate(_Transparency);
 
                 return float4(col, aOut);

@@ -1,9 +1,13 @@
+/*
+ Summary: Applies directional wind shaping on top of a baseline OceanWaveSettings at runtime without modifying the original asset. Reversible and stable.
+
+ Usage:
+   - Place on the same GameObject as Ocean (or assign refs).
+   - Set 'windLevel' 0..1 and 'windDirection' to taste; baseline restored when disabled.
+   - Tuning cutoffs/gains shapes short chop vs long swell distinctly.
+*/
+
 ﻿// OceanWindDirectional.cs — Obvious, reversible wind shaping over baseline (no Ocean.cs changes).
-// • Rotates wave directions toward wind (capped in degrees).
-// • Boosts amplitude & steepness, especially for short chop (≤ lambdaCutoffShort).
-// • Keeps wavelengths unchanged → no crest sliding.
-// • windLevel = 0 → exact baseline; windLevel > 0 → shaped look.
-// • Uses a runtime working copy of your settings; baseline remains untouched.
 
 using UnityEngine;
 using System;
@@ -46,7 +50,6 @@ public class OceanWindDirectional : MonoBehaviour
     [Tooltip("Stability margin for S·k·A < margin (keeps Gerstner stable).")]
     [Range(0.2f, 0.98f)] public float stabilityMargin = 0.95f;
 
-    // ─── Internals ──────────────────────────────────────────────────────────────
     OceanWaveSettings _baseline;   // frozen snapshot of your original look
     OceanWaveSettings _working;    // runtime copy we write into and assign to Ocean
     float _baselineChoppiness = 1f;
@@ -61,11 +64,9 @@ public class OceanWindDirectional : MonoBehaviour
 
         _baselineChoppiness = ocean.choppiness;
 
-        // Freeze baseline
         _baseline = ScriptableObject.CreateInstance<OceanWaveSettings>();
         DeepCopy(src, _baseline);
 
-        // Make a working copy and attach it to Ocean so we never touch the asset
         _working = ScriptableObject.CreateInstance<OceanWaveSettings>();
 #if UNITY_EDITOR
         _working.name = _baseline.name + " (WindWorking)";
@@ -73,14 +74,13 @@ public class OceanWindDirectional : MonoBehaviour
         DeepCopy(_baseline, _working);
         ocean.settings = _working;
 
-        // Apply immediately
         ApplyShaping();
         NotifyChanged(_working);
     }
 
     void OnDisable()
     {
-        // Restore the exact baseline
+
         if (ocean && _baseline)
         {
             ocean.settings = _baseline;
@@ -88,7 +88,7 @@ public class OceanWindDirectional : MonoBehaviour
             NotifyChanged(_baseline);
         }
 #if UNITY_EDITOR
-        // Clean up working if it’s scene-only
+
         if (_working && !UnityEditor.AssetDatabase.Contains(_working))
             DestroyImmediate(_working);
 #endif
@@ -108,12 +108,10 @@ public class OceanWindDirectional : MonoBehaviour
         NotifyChanged(_working);
     }
 
-    // ─── Core: shape over baseline, no drift, exact reset at 0 ────────────────
     void ApplyShaping()
     {
         float f = Mathf.Clamp01(windLevel);
 
-        // Exact baseline reset
         if (f <= 0.0001f)
         {
             CopyInto(_baseline, _working);      // byte-for-byte match (waves + choppiness)
@@ -121,13 +119,11 @@ public class OceanWindDirectional : MonoBehaviour
             return;
         }
 
-        // Wind heading
         Vector2 W = new Vector2(windDirection.x, windDirection.z);
         if (W.sqrMagnitude < 1e-9f) W = Vector2.right;
         W.Normalize();
         float windDeg = Mathf.Atan2(W.y, W.x) * Mathf.Rad2Deg;
 
-        // Keep array size identical to baseline (no popping)
         var src = _baseline.waves ?? Array.Empty<OceanWaveSettings.Wave>();
         if (_working.waves == null || _working.waves.Length != src.Length)
             _working.waves = new OceanWaveSettings.Wave[src.Length];
@@ -137,23 +133,19 @@ public class OceanWindDirectional : MonoBehaviour
             var b = src[i];
             var w = b; // start from baseline
 
-            // Short vs long weight
             float lambda = Mathf.Max(0.001f, b.wavelength);
             float shortW = Mathf.Clamp01((lambdaCutoffShort - lambda) / Mathf.Max(1e-3f, lambdaCutoffShort));
             float longW = 1f - shortW;
 
-            // Direction: rotate toward wind by at most (maxDirLockDeg * f * bias)
             float bias = 0.3f + 0.7f * shortW; // short waves turn more
             float delta = Mathf.DeltaAngle(b.directionDegrees, windDeg);
             float limit = maxDirLockDeg * f * bias;
             float clamped = Mathf.Clamp(delta, -limit, limit);
             w.directionDegrees = b.directionDegrees + clamped;
 
-            // Amplitude gain (more on short chop)
             float ampGain = shortW * (ampGainShortAt1 - 1f) + longW * (ampGainLongAt1 - 1f);
             w.amplitude = b.amplitude * (1f + f * ampGain);
 
-            // Steepness gain (then stability clamp S·k·A < margin)
             float steepGain = shortW * (steepGainShortAt1 - 1f) + longW * (steepGainLongAt1 - 1f);
             float Sgoal = b.steepness * (1f + f * steepGain);
 
@@ -161,21 +153,14 @@ public class OceanWindDirectional : MonoBehaviour
             float Smax = stabilityMargin / Mathf.Max(1e-6f, k * Mathf.Max(1e-6f, w.amplitude));
             w.steepness = Mathf.Min(Sgoal, Smax);
 
-            // Keep wavelength & speed exactly → no phase/wavelength pop
-            // w.wavelength = b.wavelength; // already
-            // w.speed = b.speed;           // already
-
             _working.waves[i] = w;
         }
 
-        // Keep choppiness (or nudge a tad if you want, but to be fully reversible we leave it)
         ocean.choppiness = _baselineChoppiness;
 
-        // Copy non-wave fields (choppiness already handled)
         _working.choppiness = _baseline.choppiness;
     }
 
-    // ─── Utilities ─────────────────────────────────────────────────────────────
     static void NotifyChanged(OceanWaveSettings s)
     {
         if (!s) return;

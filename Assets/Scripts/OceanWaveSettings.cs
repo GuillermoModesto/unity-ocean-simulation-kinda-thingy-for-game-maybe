@@ -1,4 +1,12 @@
-// OceanWaveSettings.cs
+/*
+ Summary: ScriptableObject asset that defines the base set of Gerstner waves (amplitude, steepness, wavelength, speed, direction) and global choppiness.
+
+ Usage:
+   - Create via Assets ▶ Create ▶ Ocean ▶ Gerstner Wave Settings.
+   - Populate 'waves' with 4–12 components for performance and variety.
+   - Changing values at runtime raises OnChanged for hot-reload in Ocean.
+*/
+
 using System;
 using UnityEngine;
 
@@ -21,15 +29,12 @@ public class OceanWaveSettings : ScriptableObject
     [Tooltip("Global choppiness multiplier for this profile (optional; your Ocean.cs can also have one).")]
     public float choppiness = 1f;
 
-    [Tooltip("Keep 4�12 waves for performance.")]
+    [Tooltip("Keep 412 waves for performance.")]
     public Wave[] waves;
 
-    // === Live update support ===
     public event Action OnChanged;
 
-    // Fires whenever you edit values in the Inspector (Edit or Play mode)
     private void OnValidate() => OnChanged?.Invoke();
 
-    /// <summary>Call this after runtime changes if you're modifying fields via code.</summary>
     public void NotifyChanged() => OnChanged?.Invoke();
 }

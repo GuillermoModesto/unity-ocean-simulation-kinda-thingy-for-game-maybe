@@ -1,6 +1,13 @@
+/*
+ Summary: Single-patch, camera/boat-centered ocean mesh with Gerstner-style waves. Bakes waves from OceanWaveSettings and pushes data to the material.
+
+ Usage:
+   - Assign an OceanWaveSettings asset and a material configured for the ocean shader.
+   - Use 'patchPreset' and 'innerSize' to control mesh size; resolution auto-derives from target cell size.
+   - Call Ocean.Sample to query height and normal for buoyancy and effects.
+*/
+
 ﻿// Ocean.cs — single-patch endless ocean with long-swell storminess shaping.
-// Mesh: one boat/camera-centered grid (no LOD rings), rebuilt when the snapped center moves.
-// NOW: innerResolution is auto-calculated from innerSize to keep cell size ~ constant.
 
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -18,11 +25,6 @@ public class Ocean : MonoBehaviour
     [Tooltip("Gravity used for deep-water dispersion (omega = sqrt(g*k)) when wave speed is 0.")]
     public float gravity = 9.81f;
 
-    // ───────────────────────────────────────────────────────────────────────────
-    // SINGLE PATCH MESH (boat/camera-centered)
-    // ───────────────────────────────────────────────────────────────────────────
-
-    // ===== Patch performance presets (presets change innerSize; resolution is derived) =====
     public enum PatchPreset { VeryLowEnd, LowEnd, MidRange, HighEnd, Custom }
 
     [Header("Patch Preset")]
@@ -63,7 +65,6 @@ public class Ocean : MonoBehaviour
     [Tooltip("Global choppiness multiplier (scales steepness for both GPU & CPU).")]
     public float choppiness = 1f;
 
-    // ---- Storminess ----------------------------------------------------
     [Header("Storminess (0 = calm / 1 = storm)")]
     [Range(0f, 1f)]
     [Tooltip("Scales amplitudes (wave height) and steepness with stability enforcement (S·k·A < 1).")]
@@ -81,7 +82,6 @@ public class Ocean : MonoBehaviour
 
     [Tooltip("How strongly the boost prefers long waves (0.3 subtle ←→ 1.0 aggressive).")]
     [Range(0.2f, 1.2f)] public float swellWaveBoostPower = 0.7f;
-    // -------------------------------------------------------------------
 
     [Header("Natural Variation")]
     [Tooltip("Split each wave into subcomponents with slight dir/freq/phase differences.")]
@@ -104,7 +104,6 @@ public class Ocean : MonoBehaviour
     [Tooltip("If true, when _Transparency >= 0.999 the renderer is pushed to the Opaque render queue.")]
     public bool forceOpaqueAtFull = true;
 
-    // ===== Internals =====
     private const int MAX_WAVES = 32;                   // Keep in sync with shader
     private Vector4[] _dirTmp = new Vector4[MAX_WAVES]; // (Dx, Dz, A, S)
     private Vector4[] _wlTmp = new Vector4[MAX_WAVES]; // (WL, omega, phi, _)
@@ -123,7 +122,6 @@ public class Ocean : MonoBehaviour
     private OceanWaveSettings _lastSettings;
     private float _lastStorminess = -1f;
 
-    // mesh buffers/state
     Vector3[] _verts;
     Vector2[] _uvs;
     int[] _tris;
@@ -131,7 +129,6 @@ public class Ocean : MonoBehaviour
     float _lastInnerSize;
     int _lastInnerRes;
 
-    // ===== Unity lifecycle =====
     void OnEnable()
     {
         _instance = this;
@@ -215,7 +212,6 @@ public class Ocean : MonoBehaviour
             RegeneratePatch();
     }
 
-    // ===== Fixed-size array priming =====
     private void PrimeArrayLengths()
     {
         if (!oceanMaterial || _arraysPrimed) return;
@@ -228,7 +224,6 @@ public class Ocean : MonoBehaviour
         _arraysPrimed = true;
     }
 
-    // ===== Renderer material sync =====
     private void SyncRendererMaterial()
     {
         var mr = GetComponent<MeshRenderer>();
@@ -249,7 +244,6 @@ public class Ocean : MonoBehaviour
         }
     }
 
-    // ===== Settings live updates =====
     void ResubscribeSettings(OceanWaveSettings newSettings)
     {
         if (_lastSettings != null)
@@ -266,7 +260,6 @@ public class Ocean : MonoBehaviour
         RecomputeAndApplyEffectiveWaves();
     }
 
-    // ===== Build & apply wave data =====
     void RecomputeAndApplyEffectiveWaves()
     {
         PrimeArrayLengths();
@@ -292,7 +285,6 @@ public class Ocean : MonoBehaviour
         _cpuWaves = cpu;
     }
 
-    // ===== Baking (naturalization + interactions) =====
     static float Rand01(int key)
     {
         unchecked { uint x = (uint)key; x ^= x << 13; x ^= x >> 17; x ^= x << 5; return (x & 0xFFFFFF) / 16777216f; }
@@ -458,16 +450,12 @@ public class Ocean : MonoBehaviour
         added++;
     }
 
-    // ===== Per-frame uniforms =====
     void UpdateMaterialProps(float tSeconds)
     {
         oceanMaterial?.SetFloat("_TimeSeconds", tSeconds);
         oceanMaterial?.SetVector("_OceanOrigin", transform.position);
     }
 
-    // ───────────────────────────────────────────────────────────────────────────
-    // Single patch mesh generation (no transform motion)
-    // ───────────────────────────────────────────────────────────────────────────
     void EnsureMesh()
     {
         var mf = GetComponent<MeshFilter>();
@@ -493,7 +481,6 @@ public class Ocean : MonoBehaviour
         var mesh = mf.sharedMesh;
         if (!mesh) return;
 
-        // Make sure resolution matches size at runtime changes too
         RecomputeResolutionFromSize();
 
         Vector3 centerWorld = GetSnappedCenter();
@@ -520,7 +507,6 @@ public class Ocean : MonoBehaviour
 
                 _verts[v] = new Vector3(xw - origin.x, 0f, zw - origin.z);
 
-                // stable UVs relative to current center (0..1 across the patch)
                 _uvs[v] = new Vector2(
                     (xw - centerWorld.x) / innerSize + 0.5f,
                     (zw - centerWorld.z) / innerSize + 0.5f
@@ -551,7 +537,6 @@ public class Ocean : MonoBehaviour
         mesh.SetUVs(0, _uvs);
         mesh.SetTriangles(_tris, 0);
 
-        // huge bounds so GPU displacement isn't culled
         mesh.bounds = new Bounds(Vector3.zero, Vector3.one * 100000f);
 
         _lastCenter = centerWorld;
@@ -559,14 +544,12 @@ public class Ocean : MonoBehaviour
         _lastInnerRes = innerResolution;
     }
 
-    // Derive resolution so cell size stays ~ targetCellSize.
     void RecomputeResolutionFromSize()
     {
-        // Ideal quads per side
+
         float ideal = Mathf.Max(1f, innerSize / Mathf.Max(0.0001f, targetCellSize));
         int res = Mathf.RoundToInt(ideal);
 
-        // Snap to even so (res+1) is odd — symmetric center
         if ((res & 1) == 1) res++;
 
         innerResolution = Mathf.Clamp(res, minResolution, maxResolution);
@@ -592,7 +575,6 @@ public class Ocean : MonoBehaviour
         return new Vector3(x, transform.position.y, z);
     }
 
-    // ===== Time helper (edit + play) =====
     float GetTimeSeconds()
     {
 #if UNITY_EDITOR
@@ -602,7 +584,6 @@ public class Ocean : MonoBehaviour
 #endif
     }
 
-    // ===== Presets (set size only; res is derived) =====
     void ApplyPresetIfChanged(bool force = false)
     {
         if (!force && patchPreset == _lastPreset) return;
@@ -613,7 +594,7 @@ public class Ocean : MonoBehaviour
             case PatchPreset.LowEnd: innerSize = 480f; break; // low-end PC baseline
             case PatchPreset.MidRange: innerSize = 650f; break; // recommended default
             case PatchPreset.HighEnd: innerSize = 900f; break; // cinematic/high-end
-            case PatchPreset.Custom: /* keep current */ break;
+            case PatchPreset.Custom:  break;
         }
 
         _lastPreset = patchPreset;
@@ -635,7 +616,6 @@ public class Ocean : MonoBehaviour
         }
     }
 
-    // ===== Public CPU sampling =====
     public static void Sample(Vector2 worldXZ, out float height, out Vector3 normal, float t = -1f, int iterations = 4)
     {
         height = 0f; normal = Vector3.up;
@@ -644,7 +624,6 @@ public class Ocean : MonoBehaviour
 
         Vector2 xzTarget = worldXZ - _instance.transform.position.XZ();
 
-        // Inverse horiz displacement: solve x0 so x0 + dispH(x0) == xzTarget
         Vector2 x0 = xzTarget;
         for (int it = 0; it < Mathf.Max(0, iterations); it++)
         {
@@ -665,7 +644,6 @@ public class Ocean : MonoBehaviour
             x0 = xNew;
         }
 
-        // Evaluate displacement + derivatives at x0
         Vector3 disp = Vector3.zero;
         Vector3 dPdX = new Vector3(1f, 0f, 0f);
         Vector3 dPdZ = new Vector3(0f, 0f, 1f);
