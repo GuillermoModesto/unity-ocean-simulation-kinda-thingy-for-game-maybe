@@ -6,6 +6,7 @@ public class BuoyantRigidbody : MonoBehaviour
     [Header("Float Settings")]
     public float AirDrag = 1f;
     public float WaterDrag = 10f;
+    public float gravityMaxForce = 1f;
     public bool AffectDirection = true;
     public bool AttachToSurface = false;
     public Transform[] FloatPoints;
@@ -18,7 +19,6 @@ public class BuoyantRigidbody : MonoBehaviour
     private Vector3 _targetUp;
 
     public float WaterLine { get; private set; }
-    public bool IsInWater { get; private set; }
     public Vector3 Center => transform.position + _centerOffset;
 
     void Awake()
@@ -68,7 +68,6 @@ public class BuoyantRigidbody : MonoBehaviour
 
         if (WaterLine > Center.y)
         {
-            IsInWater = true;
             _rb.linearDamping = WaterDrag;
 
             if (AttachToSurface)
@@ -83,12 +82,8 @@ public class BuoyantRigidbody : MonoBehaviour
                 transform.Translate(Vector3.up * (WaterLine - Center.y) * 0.9f);
             }
         }
-        else
-        {
-            IsInWater = false;
-        }
 
-        _rb.AddForce(gravity * Mathf.Clamp(Mathf.Abs(WaterLine - Center.y), 0f, 1f), ForceMode.Acceleration);
+        _rb.AddForce(gravity * Mathf.Clamp(Mathf.Abs(WaterLine - Center.y), 0f, gravityMaxForce), ForceMode.Acceleration);
 
         // Rotate boat to align with water normal
         if (pointUnderWater)

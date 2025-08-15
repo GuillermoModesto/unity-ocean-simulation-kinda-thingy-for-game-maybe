@@ -72,7 +72,7 @@ public class BoatController : MonoBehaviour
     void FixedUpdate()
     {
 
-        if (_buoyant == null || !_buoyant.IsInWater)
+        if (_buoyant == null)
         {
             if (_particleSystem) _particleSystem.Pause();
             return;
