@@ -405,76 +405,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 61.998, y: -43.2, z: -15.804}
---- !u!4 &383227846 stripped
-Transform:
-  m_CorrespondingSourceObject: {fileID: 8276404154898846048, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
-  m_PrefabInstance: {fileID: 1482903097}
-  m_PrefabAsset: {fileID: 0}
---- !u!4 &711557428 stripped
-Transform:
-  m_CorrespondingSourceObject: {fileID: 1054708126654218688, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
-  m_PrefabInstance: {fileID: 1482903097}
-  m_PrefabAsset: {fileID: 0}
---- !u!114 &734701644
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: cd56e3f0d5974f046975278e57b197ff, type: 3}
-  m_Name: ' (WindWorking)'
-  m_EditorClassIdentifier: 
-  uvOffset: {x: 0, y: 0}
-  choppiness: 0.9
-  waves:
-  - amplitude: 0.6
-    steepness: 0.5
-    wavelength: 80
-    speed: 0
-    directionDegrees: 45
-  - amplitude: 0.4
-    steepness: 0.45
-    wavelength: 60
-    speed: 0
-    directionDegrees: 50
-  - amplitude: 0.3
-    steepness: 0.4
-    wavelength: 40
-    speed: 0
-    directionDegrees: 60
-  - amplitude: 0.25
-    steepness: 0.35
-    wavelength: 70
-    speed: 0
-    directionDegrees: 110
-  - amplitude: 0.18
-    steepness: 0.5
-    wavelength: 18
-    speed: 0
-    directionDegrees: 55
-  - amplitude: 0.12
-    steepness: 0.55
-    wavelength: 12
-    speed: 0
-    directionDegrees: 35
-  - amplitude: 0.08
-    steepness: 0.7
-    wavelength: 8
-    speed: 5
-    directionDegrees: 80
-  - amplitude: 0.06
-    steepness: 0.9
-    wavelength: 6
-    speed: 8
-    directionDegrees: 320
---- !u!4 &880610351 stripped
-Transform:
-  m_CorrespondingSourceObject: {fileID: 4375266735833240841, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
-  m_PrefabInstance: {fileID: 1482903097}
-  m_PrefabAsset: {fileID: 0}
 --- !u!1 &961739749
 GameObject:
   m_ObjectHideFlags: 0
@@ -634,11 +564,6 @@ MonoBehaviour:
   sensitivity: 100
   minPitch: -20
   maxPitch: 60
---- !u!4 &1134794331 stripped
-Transform:
-  m_CorrespondingSourceObject: {fileID: 6295431846150802802, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
-  m_PrefabInstance: {fileID: 1482903097}
-  m_PrefabAsset: {fileID: 0}
 --- !u!1001 &1482903097
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -651,17 +576,29 @@ PrefabInstance:
       propertyPath: m_Name
       value: Boat
       objectReference: {fileID: 0}
+    - target: {fileID: 4414417458456775616, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
+      propertyPath: AirDrag
+      value: 3
+      objectReference: {fileID: 0}
+    - target: {fileID: 4414417458456775616, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
+      propertyPath: WaterDrag
+      value: 5
+      objectReference: {fileID: 0}
+    - target: {fileID: 4414417458456775616, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
+      propertyPath: gravityMaxForce
+      value: 10
+      objectReference: {fileID: 0}
     - target: {fileID: 7346923182472796982, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
-      propertyPath: m_UseGravity
+      propertyPath: m_Mass
       value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 7854736020535481108, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 38.8
+      value: 38.56
       objectReference: {fileID: 0}
     - target: {fileID: 7854736020535481108, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 0.342
+      value: 10.77
       objectReference: {fileID: 0}
     - target: {fileID: 7854736020535481108, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
       propertyPath: m_LocalPosition.z
@@ -669,19 +606,19 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 7854736020535481108, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
       propertyPath: m_LocalRotation.w
-      value: 0.9998492
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 7854736020535481108, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
       propertyPath: m_LocalRotation.x
-      value: 0.010464305
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 7854736020535481108, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
       propertyPath: m_LocalRotation.y
-      value: -0.006170951
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 7854736020535481108, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
       propertyPath: m_LocalRotation.z
-      value: -0.01241258
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 7854736020535481108, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
@@ -698,81 +635,13 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents:
-    - targetCorrespondingSourceObject: {fileID: 1320253696054395029, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 1670754746}
-    - targetCorrespondingSourceObject: {fileID: 1320253696054395029, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 1670754749}
-    - targetCorrespondingSourceObject: {fileID: 1320253696054395029, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 1670754752}
+    m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
---- !u!1 &1670754745 stripped
-GameObject:
-  m_CorrespondingSourceObject: {fileID: 1320253696054395029, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
-  m_PrefabInstance: {fileID: 1482903097}
-  m_PrefabAsset: {fileID: 0}
---- !u!114 &1670754746
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1670754745}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b2d899bf42f041c46a929cbf53b32887, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  AirDrag: 1
-  WaterDrag: 10
-  AffectDirection: 1
-  AttachToSurface: 0
-  FloatPoints:
-  - {fileID: 880610351}
-  - {fileID: 2072860789}
-  - {fileID: 711557428}
-  - {fileID: 383227846}
---- !u!114 &1670754749
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1670754745}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e9a99e81c44affb42a3e11f69bc95612, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  color: {r: 1, g: 0.05583445, b: 0, a: 1}
-  normalLen: 1
 --- !u!4 &1670754751 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 7854736020535481108, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
   m_PrefabInstance: {fileID: 1482903097}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &1670754752
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1670754745}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 9fa3a314857ea73458af0995a457aab2, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  Motor: {fileID: 1134794331}
-  SteerPower: 500
-  Power: 5
-  MaxSpeed: 30
-  Drag: 0.1
-  bodyDrag: 0.2
-  bodyAngularDrag: 1
 --- !u!1 &1862072623
 GameObject:
   m_ObjectHideFlags: 0
@@ -805,7 +674,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3555e9eae4db34747b52c22d7ef04ff7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  settings: {fileID: 734701644}
+  settings: {fileID: 2120420016}
   oceanMaterial: {fileID: 2100000, guid: 9ce73567e04e7da4aa9f2162f7160a86, type: 2}
   gravity: 9.81
   patchPreset: 3
@@ -819,8 +688,8 @@ MonoBehaviour:
   lodFollowTarget: {fileID: 1670754751}
   followCamera: {fileID: 961739752}
   choppiness: 0.98571426
-  storminess: 0.091
-  stormAmplitudeAt1: 9
+  storminess: 0
+  stormAmplitudeAt1: 7
   stormSteepnessAt1: 0.2
   swellWaveBoostAt1: 1.5
   swellWaveBoostPower: 1.2
@@ -926,11 +795,61 @@ MonoBehaviour:
   steepGainShortAt1: 1
   steepGainLongAt1: 2.43
   stabilityMargin: 0.98
---- !u!4 &2072860789 stripped
-Transform:
-  m_CorrespondingSourceObject: {fileID: 2506830279514931606, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
-  m_PrefabInstance: {fileID: 1482903097}
+--- !u!114 &2120420016
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cd56e3f0d5974f046975278e57b197ff, type: 3}
+  m_Name: ' (WindWorking)'
+  m_EditorClassIdentifier: 
+  uvOffset: {x: 0, y: 0}
+  choppiness: 0.9
+  waves:
+  - amplitude: 0.6
+    steepness: 0.5
+    wavelength: 80
+    speed: 0
+    directionDegrees: 45
+  - amplitude: 0.4
+    steepness: 0.45
+    wavelength: 60
+    speed: 0
+    directionDegrees: 50
+  - amplitude: 0.3
+    steepness: 0.4
+    wavelength: 40
+    speed: 0
+    directionDegrees: 60
+  - amplitude: 0.25
+    steepness: 0.35
+    wavelength: 70
+    speed: 0
+    directionDegrees: 110
+  - amplitude: 0.18
+    steepness: 0.5
+    wavelength: 18
+    speed: 0
+    directionDegrees: 55
+  - amplitude: 0.12
+    steepness: 0.55
+    wavelength: 12
+    speed: 0
+    directionDegrees: 35
+  - amplitude: 0.08
+    steepness: 0.7
+    wavelength: 8
+    speed: 5
+    directionDegrees: 80
+  - amplitude: 0.06
+    steepness: 0.9
+    wavelength: 6
+    speed: 8
+    directionDegrees: 320
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

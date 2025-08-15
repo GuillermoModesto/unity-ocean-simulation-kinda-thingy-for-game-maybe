@@ -32,6 +32,16 @@ Shader "Ocean/GerstnerURP_Simplified_Green"
         _NormalBSpeed   ("Normal B Scroll (x,y)", Vector) = (-0.02, 0.00, 0, 0)
         _NormalAStr     ("Normal A Strength", Range(0, 2)) = 0.9
         _NormalBStr     ("Normal B Strength", Range(0, 2)) = 1.2
+        _NormalStrength   ("Normal Blend Strength", Range(0,2)) = 1
+        _NormalFadeStart  ("Normal Fade Start (m)", Float)      = 5
+        _NormalFadeEnd    ("Normal Fade End (m)", Float)        = 150
+        _NormalViewAtten  ("Normal View Attenuation", Range(0,1)) = 0.5
+        _NormalSlopeAtten ("Normal Slope Attenuation", Range(0,1)) = 0.5
+
+        _SpecularColor    ("Specular Color", Color)             = (1,1,1,1)
+        _SpecularStrength ("Specular Strength", Range(0,4))     = 1
+        _FresnelPower     ("Fresnel Power", Range(0.5,8))       = 3
+        _FresnelBoost     ("Fresnel Boost", Range(0,2))         = 1
 
         _Gloss          ("Smoothness", Range(0,1))     = 0.85
         _Metallic       ("Metallic", Range(0,1))       = 0.05
@@ -40,6 +50,12 @@ Shader "Ocean/GerstnerURP_Simplified_Green"
         _FoamTiling     ("Foam Tiling", Vector)        = (0.1,0.1,0,0)
         _FoamCutoff     ("Foam Cutoff", Range(0,1))    = 0.45
         _FoamStrength   ("Foam Strength", Range(0,3))  = 1.0
+        _FoamEnabled   ("Foam Enabled", Float)            = 1
+        _FoamAmount    ("Foam Amount", Range(0,3))        = 1
+        _FoamCurvAmt   ("Foam Curvature Amount", Range(0,3)) = 1
+        _FoamSharp     ("Foam Sharpness", Range(0.5,4))   = 2
+        _FoamHeightBias("Foam Height Bias", Range(0,1))   = 0.3
+        _FoamSpeed     ("Foam Scroll (x,y)", Vector)      = (0.05, 0.02, 0, 0)
 
         _Transparency   ("Transparency", Range(0,1))   = 0.85
     }
