@@ -410,7 +410,7 @@ GameObject:
   m_CorrespondingSourceObject: {fileID: 1320253696054395029, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
   m_PrefabInstance: {fileID: 1482903097}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &605129958
+--- !u!114 &805608994
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -690,7 +690,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 7854736020535481108, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 0.32
+      value: 0.87
       objectReference: {fileID: 0}
     - target: {fileID: 7854736020535481108, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
       propertyPath: m_LocalPosition.z
@@ -737,7 +737,7 @@ PrefabInstance:
       addedObject: {fileID: 1670754756}
     - targetCorrespondingSourceObject: {fileID: 1320253696054395029, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 1670754761}
+      addedObject: {fileID: 1670754766}
   m_SourcePrefab: {fileID: 100100000, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
 --- !u!4 &1670754751 stripped
 Transform:
@@ -763,7 +763,7 @@ MonoBehaviour:
   polygonFillColor: {r: 1, g: 1, b: 1, a: 0.08}
   pointSize: 0.06
   drawAlways: 0
---- !u!114 &1670754761
+--- !u!114 &1670754766
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -778,16 +778,17 @@ MonoBehaviour:
   source: 1
   childTag: PolyPoint
   hullDecimate: 0
+  polygonScale: 1
+  contactFoamAmount: 0.5
   targetRenderer: {fileID: 1862072626}
   shaderPolyArrayName: _Poly
   shaderPolyCountName: _PolyCount
-  rippleSpeed: 0.17
+  rippleSpeed: 0.58
   rippleWidth: 0
-  rippleRepeat: 0.39
-  intensity: 1
-  rippleDecay: 2.35
-  rippleMaxDist: 1.36
-  polygonScale: 1
+  rippleRepeat: 0.74
+  rippleIntensity: 0.61
+  rippleDecay: 2.15
+  rippleMaxDist: 4
 --- !u!1 &1862072623
 GameObject:
   m_ObjectHideFlags: 0
@@ -820,7 +821,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3555e9eae4db34747b52c22d7ef04ff7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  settings: {fileID: 605129958}
+  settings: {fileID: 805608994}
   oceanMaterial: {fileID: 2100000, guid: 9ce73567e04e7da4aa9f2162f7160a86, type: 2}
   gravity: 9.81
   patchPreset: 3

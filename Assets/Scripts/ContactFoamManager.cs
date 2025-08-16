@@ -5,52 +5,78 @@ using UnityEngine;
 public class ContactFoamManager : MonoBehaviour
 {
     public enum SourceMode { AutoFromMeshConvexHull, ChildTransformsWithTag }
-    [Header("How to get polygon points (auto)")]
+
+    [Header("Polygon source")]
     [SerializeField] SourceMode source = SourceMode.AutoFromMeshConvexHull;
     [SerializeField] string childTag = "PolyPoint";
-    [SerializeField] int hullDecimate = 0; // 0=no decimation; >0 keeps every Nth point on hull
+    [SerializeField] int hullDecimate = 0;      // keep every Nth hull vertex (0 = none)
+    [SerializeField] float polygonScale = 1.0f; // 1=unchanged, <1 shrink, >1 grow
 
-    [Header("Ocean shader hookup (auto)")]
-    [SerializeField] Renderer targetRenderer;                 // auto-found if left empty
-    [SerializeField] string shaderPolyArrayName = "_Poly";    // keep defaults per shader
+    [Header("Overall ripple amount")]
+    [SerializeField] float contactFoamAmount = 1.0f;
+
+    [Header("Ocean hookup")]
+    [SerializeField] Renderer targetRenderer;      // assign the Ocean renderer, or auto-find
+    [SerializeField] string shaderPolyArrayName = "_Poly";
     [SerializeField] string shaderPolyCountName = "_PolyCount";
 
     [Header("Polygon ripple params (match shader)")]
     [SerializeField] float rippleSpeed = 1.0f;
-    [SerializeField] float rippleWidth = 0.1f;   // 0..1 band thickness
-    [SerializeField] float rippleRepeat = 2.0f;  // wavelength (units)
-    [SerializeField] float intensity = 1.0f;
+    [SerializeField] float rippleWidth = 0.1f;
+    [SerializeField] float rippleRepeat = 2.0f;
+    [SerializeField] float rippleIntensity = 1.0f;
+    [SerializeField] float rippleDecay = 0.6f;     // 1/unit
+    [SerializeField] float rippleMaxDist = 8f;     // 0 = off
 
-    [SerializeField] float rippleDecay = 0.6f;   // per distance unit (higher = faster fade)
-    [SerializeField] float rippleMaxDist = 8f;  // 0 = infinite (decay only)
+    const int MAX_POLY = 256;                      // must match shader
+    static readonly Vector4[] POLY_BUFFER = new Vector4[MAX_POLY];
 
-    // Advanced: shrink/expand the polygon relative to its centroid (1=unchanged, <1 shrink, >1 grow)
-    [SerializeField] float polygonScale = 1.0f;
-
-    // Cache
     MaterialPropertyBlock _mpb;
+    readonly List<Vector2> _polyXZ = new();
 
     void OnEnable()
     {
         if (_mpb == null) _mpb = new MaterialPropertyBlock();
         AutoFindOceanRendererIfNeeded();
+
+        // Prime full-size array once so Unity doesn't lock a tiny buffer
+        if (targetRenderer)
+        {
+            targetRenderer.GetPropertyBlock(_mpb);
+            _mpb.Clear();
+            _mpb.SetVectorArray(shaderPolyArrayName, POLY_BUFFER); // full length, zeros
+            _mpb.SetInt(shaderPolyCountName, 0);
+            targetRenderer.SetPropertyBlock(_mpb);
+        }
+
         Push();
     }
 
     void OnDisable()
     {
-        // optional: clear MPB
         if (targetRenderer)
         {
+            if (_mpb == null) _mpb = new MaterialPropertyBlock();
             targetRenderer.GetPropertyBlock(_mpb);
-            _mpb.SetInt(shaderPolyCountName, 0);
+            _mpb.Clear(); // clears _Poly etc.
             targetRenderer.SetPropertyBlock(_mpb);
         }
     }
 
     void Update()
     {
-        // Keep it “live” in Edit/Play
+        AutoFindOceanRendererIfNeeded();
+
+        // Build polygon (world XZ)
+        BuildPolygonXZ(_polyXZ);
+        EnsureFallbackPolygon(_polyXZ); // guarantee >= 3 points
+
+        if (polygonScale != 1f && _polyXZ.Count >= 3)
+        {
+            Vector2 c = Vector2.zero; foreach (var p in _polyXZ) c += p; c /= _polyXZ.Count;
+            for (int i = 0; i < _polyXZ.Count; i++) _polyXZ[i] = c + (_polyXZ[i] - c) * polygonScale;
+        }
+
         Push();
     }
 
@@ -58,83 +84,59 @@ public class ContactFoamManager : MonoBehaviour
     {
         if (targetRenderer && targetRenderer.sharedMaterial) return;
 
-        // Try: any renderer in scene with a material that uses the ocean shader
         var rends = Object.FindObjectsByType<Renderer>(FindObjectsSortMode.None);
         foreach (var r in rends)
         {
-            var mats = r.sharedMaterials;
-            foreach (var m in mats)
+            foreach (var m in r.sharedMaterials)
             {
                 if (!m) continue;
-                var sh = m.shader;
-                if (sh && sh.name == "Ocean/GerstnerURP_Simplified_Green")
-                {
-                    targetRenderer = r;
-                    return;
-                }
+                if (m.shader && m.shader.name == "Ocean/GerstnerURP_Simplified_Green")
+                { targetRenderer = r; return; }
             }
         }
-        // Fallback: try self
         if (!targetRenderer) targetRenderer = GetComponent<Renderer>();
     }
 
     void Push()
     {
-        if (!targetRenderer) AutoFindOceanRendererIfNeeded();
         if (!targetRenderer) return;
+        if (_mpb == null) _mpb = new MaterialPropertyBlock();
 
-        // Build polygon in WORLD XZ
-        List<Vector2> polyXZ = BuildPolygonXZ();
+        int n = Mathf.Clamp(_polyXZ.Count, 0, MAX_POLY);
 
-        // Optional scale around centroid
-        if (polygonScale != 1f && polyXZ.Count >= 3)
-        {
-            Vector2 c = Vector2.zero;
-            for (int i = 0; i < polyXZ.Count; i++) c += polyXZ[i];
-            c /= polyXZ.Count;
-            for (int i = 0; i < polyXZ.Count; i++)
-                polyXZ[i] = c + (polyXZ[i] - c) * polygonScale;
-        }
-
-        // Upload to MPB (Vector4[] required)
-        int n = Mathf.Clamp(polyXZ.Count, 0, 256);
-        var arr = new Vector4[Mathf.Max(n, 1)];
-        for (int i = 0; i < n; i++)
-            arr[i] = new Vector4(polyXZ[i].x, polyXZ[i].y, 0f, 0f);
-        if (n == 0) arr[0] = Vector4.zero;
+        // Fill fixed-size buffer (first n = points, rest zeros)
+        for (int i = 0; i < n; i++) POLY_BUFFER[i] = new Vector4(_polyXZ[i].x, _polyXZ[i].y, 0f, 0f);
+        for (int i = n; i < MAX_POLY; i++) POLY_BUFFER[i] = Vector4.zero;
 
         targetRenderer.GetPropertyBlock(_mpb);
-        _mpb.SetVectorArray(shaderPolyArrayName, arr);
+        _mpb.Clear();
+
+        _mpb.SetVectorArray(shaderPolyArrayName, POLY_BUFFER); // ALWAYS same length
         _mpb.SetInt(shaderPolyCountName, n);
 
-        // Time + ripple params (names match the shader you pasted)
         _mpb.SetFloat("_PolyTime", Application.isPlaying ? Time.time : 0f);
         _mpb.SetFloat("_PolyRippleSpeed", rippleSpeed);
         _mpb.SetFloat("_PolyRippleWidth", rippleWidth);
         _mpb.SetFloat("_PolyRippleRepeat", rippleRepeat);
-        _mpb.SetFloat("_PolyRippleIntensity", intensity);
+        _mpb.SetFloat("_PolyRippleIntensity", rippleIntensity);
         _mpb.SetFloat("_PolyRippleDecay", rippleDecay);
         _mpb.SetFloat("_PolyRippleMaxDist", rippleMaxDist);
+        _mpb.SetFloat("_ContactFoamAmount", contactFoamAmount);
 
         targetRenderer.SetPropertyBlock(_mpb);
     }
 
-    // ------------------------------
-    // POLYGON BUILDERS (WORLD XZ)
-    // ------------------------------
+    // ---------- Polygon builders ----------
 
-    List<Vector2> BuildPolygonXZ()
+    void BuildPolygonXZ(List<Vector2> outList)
     {
-        if (source == SourceMode.ChildTransformsWithTag)
-            return BuildFromTaggedChildren();
-
-        // Default: convex hull from this object's mesh in world XZ
-        return BuildFromMeshConvexHull();
+        outList.Clear();
+        if (source == SourceMode.ChildTransformsWithTag) BuildFromTaggedChildren(outList);
+        else BuildFromMeshConvexHull(outList);
     }
 
-    List<Vector2> BuildFromTaggedChildren()
+    void BuildFromTaggedChildren(List<Vector2> result)
     {
-        var result = new List<Vector2>(16);
         var tfs = GetComponentsInChildren<Transform>(true);
         foreach (var t in tfs)
         {
@@ -143,50 +145,65 @@ public class ContactFoamManager : MonoBehaviour
             Vector3 w = t.position;
             result.Add(new Vector2(w.x, w.z));
         }
-        // Order them around centroid so the shader gets a clean loop
         OrderPointsCCW(result);
-        return result;
     }
 
-    List<Vector2> BuildFromMeshConvexHull()
+    void BuildFromMeshConvexHull(List<Vector2> result)
     {
-        var result = new List<Vector2>(32);
         var mf = GetComponent<MeshFilter>();
         Mesh mesh = mf ? (Application.isPlaying ? mf.mesh : mf.sharedMesh) : null;
-        if (!mesh || mesh.vertexCount == 0) return result;
+
+        // Fallback to renderer bounds if no mesh
+        if (!mesh || mesh.vertexCount == 0)
+        {
+            var rend = GetComponentInChildren<Renderer>();
+            if (rend)
+            {
+                Bounds b = rend.bounds;
+                result.Add(new Vector2(b.min.x, b.min.z));
+                result.Add(new Vector2(b.max.x, b.min.z));
+                result.Add(new Vector2(b.max.x, b.max.z));
+                result.Add(new Vector2(b.min.x, b.max.z));
+            }
+            return;
+        }
 
         var verts = mesh.vertices;
         var trs = transform.localToWorldMatrix;
-
-        // Collect projected XZ points in world
         var pts = new List<Vector2>(verts.Length);
         for (int i = 0; i < verts.Length; i++)
         {
             Vector3 w = trs.MultiplyPoint3x4(verts[i]);
             pts.Add(new Vector2(w.x, w.z));
         }
-
-        // Convex hull (Graham scan)
         var hull = ConvexHull(pts);
         if (hullDecimate > 1 && hull.Count > hullDecimate)
         {
             var dec = new List<Vector2>();
-            for (int i = 0; i < hull.Count; i += hullDecimate)
-                dec.Add(hull[i]);
-            // ensure closed loop feel by adding last if not same as first
-            if (dec.Count >= 2 && dec[0] != dec[^1]) { /* shader closes loop anyway */ }
+            for (int i = 0; i < hull.Count; i += hullDecimate) dec.Add(hull[i]);
             hull = dec;
         }
-        return hull;
+        result.AddRange(hull);
     }
 
-    // Counter-clockwise sort around centroid (for child-tag mode)
+    void EnsureFallbackPolygon(List<Vector2> poly)
+    {
+        if (poly.Count >= 3) return;
+        poly.Clear();
+        Vector2 c = new Vector2(transform.position.x, transform.position.z);
+        float r = 1.0f;
+        const int SEG = 12;
+        for (int i = 0; i < SEG; i++)
+        {
+            float ang = i * (Mathf.PI * 2f / SEG);
+            poly.Add(c + new Vector2(Mathf.Cos(ang), Mathf.Sin(ang)) * r);
+        }
+    }
+
     static void OrderPointsCCW(List<Vector2> pts)
     {
         if (pts.Count < 3) return;
-        Vector2 c = Vector2.zero;
-        foreach (var p in pts) c += p;
-        c /= pts.Count;
+        Vector2 c = Vector2.zero; foreach (var p in pts) c += p; c /= pts.Count;
         pts.Sort((a, b) =>
         {
             float angA = Mathf.Atan2(a.y - c.y, a.x - c.x);
@@ -195,7 +212,6 @@ public class ContactFoamManager : MonoBehaviour
         });
     }
 
-    // Simple Convex Hull (Graham / monotone chain)
     static List<Vector2> ConvexHull(List<Vector2> pts)
     {
         var P = new List<Vector2>(pts);
@@ -221,5 +237,6 @@ public class ContactFoamManager : MonoBehaviour
         return lower;
     }
 
-    static float Cross(Vector2 a, Vector2 b, Vector2 c) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+    static float Cross(Vector2 a, Vector2 b, Vector2 c)
+        => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
 }

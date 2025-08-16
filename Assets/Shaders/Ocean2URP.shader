@@ -1,15 +1,5 @@
 /*
- Summary: URP-compatible ocean surface shader that consumes wave buffers from Ocean.cs to render normals, displacement, and shading.
-
- Usage:
-   - Use with a material referenced by Ocean.cs. Shader expects wave arrays (_DirAmpSteep, _WlOmegaPad).
-   - Transparency drives render queue; Ocean.cs can force opaque when near-opaque for sorting stability.
-   - Tweak normals/foam parameters in the material for look-dev.
-
-   Added:
-   - Polygon-driven contact/ripple foam. Provide _Poly (Vector4[]: x=worldX, y=worldZ) + _PolyCount.
-   - If _PolyCount >= 3, foam/ripples originate from the polygon boundary (signed distance SDF).
-   - Falls back to point emitters if no polygon is provided.
+ URP-compatible ocean shader + polygon-driven ripples (no trail).
 */
 
 Shader "Ocean/GerstnerURP_Simplified_Green"
@@ -55,12 +45,12 @@ Shader "Ocean/GerstnerURP_Simplified_Green"
         _FoamTiling     ("Foam Tiling", Vector)        = (0.1,0.1,0,0)
         _FoamCutoff     ("Foam Cutoff", Range(0,1))    = 0.45
         _FoamStrength   ("Foam Strength", Range(0,3))  = 1.0
-        _FoamEnabled   ("Foam Enabled", Float)            = 1
-        _FoamAmount    ("Foam Amount", Range(0,3))        = 1
-        _FoamCurvAmt   ("Foam Curvature Amount", Range(0,3)) = 1
-        _FoamSharp     ("Foam Sharpness", Range(0.5,4))   = 2
-        _FoamHeightBias("Foam Height Bias", Range(0,1))   = 0.3
-        _FoamSpeed     ("Foam Scroll (x,y)", Vector)      = (0.05, 0.02, 0, 0)
+        _FoamEnabled    ("Foam Enabled", Float)        = 1
+        _FoamAmount     ("Foam Amount", Range(0,3))    = 1
+        _FoamCurvAmt    ("Foam Curvature Amount", Range(0,3)) = 1
+        _FoamSharp      ("Foam Sharpness", Range(0.5,4))   = 2
+        _FoamHeightBias ("Foam Height Bias", Range(0,1))   = 0.3
+        _FoamSpeed      ("Foam Scroll (x,y)", Vector)      = (0.05, 0.02, 0, 0)
 
         _Transparency   ("Transparency", Range(0,1))   = 0.85
 
@@ -69,8 +59,8 @@ Shader "Ocean/GerstnerURP_Simplified_Green"
         _PolyRippleWidth     ("Poly Ripple Band Width", Range(0.0, 1.0)) = 0.15
         _PolyRippleRepeat    ("Poly Ripple Wavelength", Float) = 2.0
         _PolyRippleIntensity ("Poly Ripple Intensity", Float) = 1.0
-        _PolyRippleDecay    ("Poly Ripple Decay (1/unit)", Float) = 0.6
-        _PolyRippleMaxDist  ("Poly Ripple Max Distance (0=off)", Float) = 8.0
+        _PolyRippleDecay     ("Poly Ripple Decay (1/unit)", Float) = 0.6
+        _PolyRippleMaxDist   ("Poly Ripple Max Distance (0=off)", Float) = 8.0
 
         [HideInInspector]_PolyCount ("Polygon Count", Int) = 0
         [HideInInspector]_PolyTime  ("Poly Time", Float)   = 0
@@ -120,21 +110,20 @@ Shader "Ocean/GerstnerURP_Simplified_Green"
             struct Attributes { float4 positionOS:POSITION; };
             struct Varyings   { float4 positionCS:SV_POSITION; float3 worldPos:TEXCOORD0; float3 worldNorm:TEXCOORD1; };
 
-            // --- Existing point contact inputs ---
+            // --- Legacy point contacts (kept unchanged) ---
             #define MAX_CONTACTS 64
             int    _ContactCount;
             float4 _ContactPoints[MAX_CONTACTS]; // (x=worldX, y=worldZ, z=radius, w=strength)
-            float  _ContactFoamAmount;           // overall intensity
+            float  _ContactFoamAmount;
             float4 _ContactRipple;               // (frequency, speed, decay, strength)
 
-            // --- NEW: Polygon inputs (world XZ) ---
-            // Keep modest upper bound for mobile friendliness
+            // --- Polygon inputs (world XZ) ---
             #define MAX_POLY 256
             int   _PolyCount;
             float _PolyTime;
-            float4 _Poly[MAX_POLY]; // use .xy as (worldX, worldZ)
+            float4 _Poly[MAX_POLY]; // use .xy (worldX, worldZ)
 
-            // NEW: Polygon ripple controls
+            // Polygon ripple controls
             float _PolyRippleSpeed;
             float _PolyRippleWidth;
             float _PolyRippleRepeat;
@@ -142,7 +131,7 @@ Shader "Ocean/GerstnerURP_Simplified_Green"
             float _PolyRippleDecay;
             float _PolyRippleMaxDist;
 
-
+            // ------------ helpers ------------
             float3 UnpackRG(float4 t, float strength)
             {
                 float3 n;
@@ -166,7 +155,7 @@ Shader "Ocean/GerstnerURP_Simplified_Green"
 
             float3 GreenRamp(float h, float softness)
             {
-                float w = lerp(0.02, 0.10, saturate(softness)); // widen blends with softness
+                float w = lerp(0.02, 0.10, saturate(softness));
                 float k0=0.00, k1=0.25, k2=0.45, k3=0.65, k4=0.82, k5=0.95;
 
                 if (h < k1) { float t = smoothWider(k0, k1, h, w); return lerp(_AbyssColor.rgb,   _DeepColor.rgb,    t); }
@@ -177,7 +166,7 @@ Shader "Ocean/GerstnerURP_Simplified_Green"
                 return _ShallowColor.rgb;
             }
 
-            // ---------- NEW: Polygon SDF helpers (world XZ) ----------
+            // ---------- Polygon SDF ----------
             float2 ClosestPointOnSegment(float2 a, float2 b, float2 p)
             {
                 float2 ab = b - a;
@@ -217,38 +206,28 @@ Shader "Ocean/GerstnerURP_Simplified_Green"
                 return inside;
             }
 
-            // Signed distance: negative inside, positive outside
             float SdPolygon(float2 p, int count)
             {
                 float d = DistToPolyline(p, count);
                 return PointInPolygon(p, count) ? -d : d;
             }
 
-            // Band-limited ripple along SDF
             float PolygonRipple(float sd, float t, float speed, float repeat, float width)
             {
-                // ripple travels outward from boundary; abs(sd) for symmetric inside/outside bands
                 float phase = (abs(sd) - speed * t) / max(repeat, 1e-6);
-                float tri = 1.0 - abs(frac(phase) * 2.0 - 1.0);    // [0,1]
-                float band = smoothstep(0.5, 0.5 - width, tri);    // thin band
-                return band;
+                float tri = 1.0 - abs(frac(phase) * 2.0 - 1.0);
+                return smoothstep(0.5, 0.5 - width, tri);
             }
 
-            // Distance-based attenuation: exponential + gentle fade to 0 near MaxDist
             float PolyRippleAtten(float sd, float decay, float maxDist)
             {
                 float d = abs(sd);
-                // Exponential rolloff
                 float a = exp(-d * max(decay, 1e-6));
-                // Optional outer fade-to-zero (0 disables)
-                if (maxDist > 0.0)
-                {
-                    // start fading at 80% of maxDist to avoid a hard edge
-                    a *= smoothstep(maxDist, maxDist * 0.8, d);
-                }
+                if (maxDist > 0.0) a *= smoothstep(maxDist, maxDist * 0.8, d);
                 return a;
             }
 
+            // ----------- pipeline -----------
             Varyings vert(Attributes IN)
             {
                 Varyings o;
@@ -353,19 +332,18 @@ Shader "Ocean/GerstnerURP_Simplified_Green"
                 foamMask = saturate(foamMask);
 
                 // ----------------- CONTACT FOAM -----------------
-                // A) NEW polygon-driven ripple/foam (preferred if polygon provided)
+                // A) Polygon-driven ripple/foam
                 float polyFoam = 0.0;
                 if (_PolyCount >= 3)
                 {
                     float2 p = IN.worldPos.xz;
-                    float sd = SdPolygon(p, _PolyCount); // signed distance, <0 inside
-                    float band = PolygonRipple(sd, _PolyTime, _PolyRippleSpeed, _PolyRippleRepeat, _PolyRippleWidth);
+                    float sd = SdPolygon(p, _PolyCount); // signed distance
+                    float band  = PolygonRipple(sd, _PolyTime, _PolyRippleSpeed, _PolyRippleRepeat, _PolyRippleWidth);
                     float atten = PolyRippleAtten(sd, _PolyRippleDecay, _PolyRippleMaxDist);
                     polyFoam = saturate(band * atten * _PolyRippleIntensity);
-
                 }
 
-                // B) Legacy point emitters (fallback if no polygon)
+                // B) Legacy point emitters (fallback)
                 float contactFoam = 0.0;
                 if (_PolyCount < 3 && _ContactCount > 0)
                 {
@@ -393,17 +371,15 @@ Shader "Ocean/GerstnerURP_Simplified_Green"
                     }
                 }
 
-                // Combine: polygon preferred, else points; also blend in your base foam if desired
+                // Combine and tint
                 float contactMask = max(polyFoam, contactFoam);
-                // Tint toward white based on contact foam amount + base foam (optional weighting)
                 float combinedFoam = saturate(contactMask * _ContactFoamAmount);
                 col = lerp(col, float3(1,1,1), combinedFoam);
 
-                // If you want to also include your normal foam field:
+                // Optional: also include base foam field
                 // col = lerp(col, _FoamColor.rgb, foamMask * _FoamStrength);
 
                 float aOut = saturate(_Transparency);
-
                 return float4(col, aOut);
             }
             ENDHLSL
