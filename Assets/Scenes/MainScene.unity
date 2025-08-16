@@ -410,6 +410,11 @@ GameObject:
   m_CorrespondingSourceObject: {fileID: 1320253696054395029, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
   m_PrefabInstance: {fileID: 1482903097}
   m_PrefabAsset: {fileID: 0}
+--- !u!4 &716536733 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 8836455141808130680, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
+  m_PrefabInstance: {fileID: 1482903097}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &961739749
 GameObject:
   m_ObjectHideFlags: 0
@@ -635,7 +640,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 7854736020535481108, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 0.87
+      value: 0.43
       objectReference: {fileID: 0}
     - target: {fileID: 7854736020535481108, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
       propertyPath: m_LocalPosition.z
@@ -675,7 +680,10 @@ PrefabInstance:
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
-    m_AddedGameObjects: []
+    m_AddedGameObjects:
+    - targetCorrespondingSourceObject: {fileID: 8836455141808130680, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1720931175}
     m_AddedComponents:
     - targetCorrespondingSourceObject: {fileID: 1320253696054395029, guid: eac28881463a56e47b512e3ba3f69f8a, type: 3}
       insertIndex: -1
@@ -737,12 +745,12 @@ MonoBehaviour:
   targetRenderer: {fileID: 1862072626}
   shaderPolyArrayName: _Poly
   shaderPolyCountName: _PolyCount
-  rippleSpeed: 0.58
-  rippleWidth: 0.2
-  rippleRepeat: 0.74
-  rippleIntensity: 0.61
-  rippleDecay: 2.15
-  rippleMaxDist: 4
+  rippleSpeed: 0.52
+  rippleWidth: 0.77
+  rippleRepeat: 1
+  rippleIntensity: 0.91
+  rippleDecay: 1.77
+  rippleMaxDist: 0.92
 --- !u!114 &1670754767
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -755,7 +763,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 192f40520ae1e8143932be49f8087781, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  polyPoints: []
+  polyPoints:
+  - {fileID: 1720931175}
   sternPoint: {fileID: 0}
   emitRatePerPoint: 8
   jitter: 0.5
@@ -1778,8 +1787,66 @@ ParticleSystem:
         m_PreInfinity: 2
         m_PostInfinity: 2
         m_RotationOrder: 4
-    m_BurstCount: 0
-    m_Bursts: []
+    m_BurstCount: 1
+    m_Bursts:
+    - serializedVersion: 2
+      time: 0
+      countCurve:
+        serializedVersion: 2
+        minMaxState: 0
+        scalar: 5
+        minScalar: 30
+        maxCurve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        minCurve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+      cycleCount: 1
+      repeatInterval: 0.01
+      probability: 1
   SizeModule:
     enabled: 1
     curve:
@@ -1793,17 +1860,26 @@ ParticleSystem:
         - serializedVersion: 3
           time: 0
           value: 0
-          inSlope: 0
-          outSlope: 0
+          inSlope: 2
+          outSlope: 2
           tangentMode: 0
           weightedMode: 0
           inWeight: 0
           outWeight: 0
         - serializedVersion: 3
+          time: 0.7485245
+          value: 0.63994074
+          inSlope: -0.29403308
+          outSlope: -0.29403308
+          tangentMode: 0
+          weightedMode: 0
+          inWeight: 0.13818355
+          outWeight: 0.9464214
+        - serializedVersion: 3
           time: 1
-          value: 1
-          inSlope: 2
-          outSlope: 2
+          value: 0
+          inSlope: 0
+          outSlope: 0
           tangentMode: 0
           weightedMode: 0
           inWeight: 0
@@ -5561,6 +5637,37 @@ ParticleSystem:
         m_PostInfinity: 2
         m_RotationOrder: 4
     vectorLabel1_3: W
+--- !u!1 &1720931174
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1720931175}
+  m_Layer: 0
+  m_Name: GameObject (5)
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1720931175
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1720931174}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 2.628, y: 0.255, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 716536733}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1862072623
 GameObject:
   m_ObjectHideFlags: 0
@@ -5593,7 +5700,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3555e9eae4db34747b52c22d7ef04ff7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  settings: {fileID: 1868248681}
+  settings: {fileID: 2112088616}
   oceanMaterial: {fileID: 2100000, guid: 9ce73567e04e7da4aa9f2162f7160a86, type: 2}
   gravity: 9.81
   patchPreset: 3
@@ -5714,7 +5821,7 @@ MonoBehaviour:
   steepGainShortAt1: 1
   steepGainLongAt1: 2.43
   stabilityMargin: 0.98
---- !u!114 &1868248681
+--- !u!114 &2112088616
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}

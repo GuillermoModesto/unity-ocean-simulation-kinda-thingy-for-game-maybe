@@ -12,13 +12,18 @@ public class SimpleWakeSpawner : MonoBehaviour
     public float startLifetime = 4f;
 
     ParticleSystem ps;
+    BoatController bc;
     float accum;
 
-    void Awake() => ps = GetComponent<ParticleSystem>();
+    void Awake()
+    {
+        ps = GetComponent<ParticleSystem>(); 
+        bc = GetComponent<BoatController>();
+    }
 
     void LateUpdate()
     {
-        if (!ps) return;
+        if (!ps || !bc.isMoving) return;
 
         var points = new List<Transform>();
         if (polyPoints != null && polyPoints.Length >= 3) points.AddRange(polyPoints);

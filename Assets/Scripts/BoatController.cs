@@ -33,18 +33,17 @@ public class BoatController : MonoBehaviour
     private Rigidbody _rb;
     private BuoyantRigidbody _buoyant;
     private Quaternion _startRotation;
-    private ParticleSystem _particleSystem;
     private Camera _camera;
 
     private InputSystem_Actions _actions;
     private Vector2 _move;
+    public bool isMoving;
     private bool _hasActions;
 
     private Vector3 _camVel;
 
     void Awake()
     {
-        _particleSystem = GetComponentInChildren<ParticleSystem>();
         _rb = GetComponent<Rigidbody>();
         _buoyant = GetComponent<BuoyantRigidbody>();
         _startRotation = Motor ? Motor.localRotation : Quaternion.identity;
@@ -74,13 +73,14 @@ public class BoatController : MonoBehaviour
 
         if (_buoyant == null)
         {
-            if (_particleSystem) _particleSystem.Pause();
             return;
         }
 
         int steer = 0;
         if (_move.x > 0.2f) steer = -1;
         if (_move.x < -0.2f) steer = 1;
+        if (_move.x != 0 || _move.y != 0) isMoving = true;
+        else isMoving = false;
 
         if (Motor)
             _rb.AddForceAtPosition(steer * transform.right * (SteerPower / 100f), Motor.position);
@@ -92,16 +92,10 @@ public class BoatController : MonoBehaviour
         if (_move.y > 0.2f)
         {
             ApplyForceToReachVelocity(_rb, forward * MaxSpeed, Power);
-            if (_particleSystem) _particleSystem.Play();
         }
         else if (_move.y < -0.2f)
         {
             ApplyForceToReachVelocity(_rb, forward * -MaxSpeed, Power);
-            if (_particleSystem) _particleSystem.Play();
-        }
-        else
-        {
-            if (_particleSystem) _particleSystem.Pause();
         }
 
         if (Motor)
