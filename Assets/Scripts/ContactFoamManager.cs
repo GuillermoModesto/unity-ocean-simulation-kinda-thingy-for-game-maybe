@@ -34,10 +34,13 @@ public class ContactFoamManager : MonoBehaviour
     MaterialPropertyBlock _mpb;
     readonly List<Vector2> _polyXZ = new();
 
+    BoatController _boatController;
+
     void OnEnable()
     {
         if (_mpb == null) _mpb = new MaterialPropertyBlock();
         AutoFindOceanRendererIfNeeded();
+        _boatController = GetComponent<BoatController>();
 
         // Prime full-size array once so Unity doesn't lock a tiny buffer
         if (targetRenderer)
@@ -76,6 +79,15 @@ public class ContactFoamManager : MonoBehaviour
             Vector2 c = Vector2.zero; foreach (var p in _polyXZ) c += p; c /= _polyXZ.Count;
             for (int i = 0; i < _polyXZ.Count; i++) _polyXZ[i] = c + (_polyXZ[i] - c) * polygonScale;
         }
+
+        float target = _boatController.isMoving ? 0f : 1f;
+
+        // Smoothly interpolate contactFoamAmount toward the target
+        contactFoamAmount = Mathf.MoveTowards(
+            contactFoamAmount,
+            target,
+            1.5f * Time.deltaTime
+        );
 
         Push();
     }
